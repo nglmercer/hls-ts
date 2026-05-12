@@ -54,11 +54,7 @@ describe('BufferController - error paths', () => {
 
     (bc as unknown as { _onMediaAttached: (data: any) => void })._onMediaAttached({ media: video });
     (bc as unknown as { _onBufferCodecs: (data: any) => void })._onBufferCodecs({ videoCodec: 'avc1.64001e', audioCodec: 'mp4a.40.2' });
-    
-    // We can't easily trigger the anonymous source open handler anymore if it's not exposed.
-    // But we can trigger the cleanup.
     (bc as unknown as { _onMediaDetached: () => void })._onMediaDetached();
-
     bc.destroy();
   });
 
@@ -69,12 +65,6 @@ describe('BufferController - error paths', () => {
     (bc as unknown as { _onMediaAttached: (data: any) => void })._onMediaAttached({ media: { src: '' } as unknown as HTMLVideoElement });
     (bc as unknown as { _onBufferCodecs: (data: any) => void })._onBufferCodecs({ videoCodec: 'avc1.64001e' });
 
-    // Since source buffers are created in an async-ish way (sourceopen), we might need to trigger it
-    // In new BufferController, it's this._onMediaSourceOpen
-    const msOpen = (bc as any)._onMediaSourceOpen;
-    if (msOpen) msOpen();
-
-    // Queue data
     const data = new ArrayBuffer(50);
     (bc as unknown as { _onBufferAppending: (data: any) => void })._onBufferAppending({ data, type: 'video' });
 
@@ -87,14 +77,6 @@ describe('BufferController - error paths', () => {
 
     (bc as unknown as { _onMediaAttached: (data: any) => void })._onMediaAttached({ media: { src: '' } as unknown as HTMLVideoElement });
     (bc as unknown as { _onBufferCodecs: (data: any) => void })._onBufferCodecs({ videoCodec: 'avc1.64001e' });
-    
-    const msOpen = (bc as any)._onMediaSourceOpen;
-    if (msOpen) msOpen();
-
-    // Set updating flag then flush
-    if ((bc as any)._videoBuffer) {
-      (bc as any)._videoBuffer.updating = true;
-    }
     (bc as unknown as { _onBufferFlushing: (data: any) => void })._onBufferFlushing({ startOffset: 0, endOffset: 10 });
 
     bc.destroy();
@@ -104,14 +86,12 @@ describe('BufferController - error paths', () => {
     const hls = new Hls();
     const bc = new BufferController(hls);
 
-    // Call processing methods directly
-    (bc as any)._processVideoQueue();
-    (bc as any)._processAudioQueue();
+    // Call processing without source buffer — should be no-op
+    (bc as any)._processQueue();
 
-    // Set appending flags and call again
-    (bc as any)._videoAppending = true;
-    (bc as any)._processVideoQueue();
-    expect((bc as any)._videoAppending).toBe(true);
+    (bc as any)._appending = true;
+    (bc as any)._processQueue();
+    expect((bc as any)._appending).toBe(true);
 
     bc.destroy();
   });
@@ -287,24 +267,51 @@ describe('TSDemuxer - multi-NALU PES for _accumulateNALUs', () => {
 
 function buildMultiNaluTSPackets(): Uint8Array {
   const pat = new Uint8Array(188).fill(0xff);
-  pat[0] = 0x47; pat[1] = 0x40; pat[2] = 0x00; pat[3] = 0x50;
+  pat[0] = 0x47; pat[1] = 0x40; pat[2] = 0x00; pat[3] = 0x10;
+  // pointer_field = 0
   pat[4] = 0x00;
-  pat[5] = 0x00; pat[6] = 0x30; pat[7] = 0x0d;
-  pat[8] = 0x00; pat[9] = 0x01; pat[10] = 0xc1; pat[11] = 0x00; pat[12] = 0x00;
+  // table_id = 0x00, section_syntax_indicator + section_length
+  pat[5] = 0x00; pat[6] = 0xb0; pat[7] = 0x0d;
+  // transport_stream_id (2)
+  pat[8] = 0x00; pat[9] = 0x01;
+  // version + current_next
+  pat[10] = 0xc1;
+  // section_number, last_section_number
+  pat[11] = 0x00; pat[12] = 0x00;
+  // program_number = 1
   pat[13] = 0x00; pat[14] = 0x01;
+  // PMT PID = 0x1001 (0xf0 | 0x01 = reserved bits + PID)
   pat[15] = 0xf0; pat[16] = 0x01;
 
   const pmt = new Uint8Array(188).fill(0xff);
-  pmt[0] = 0x47; pmt[1] = 0x40 | 0x10; pmt[2] = 0x01; pmt[3] = 0x50;
+  pmt[0] = 0x47; pmt[1] = 0x50; pmt[2] = 0x01; pmt[3] = 0x10;
+  // pointer_field = 0
   pmt[4] = 0x00;
-  pmt[5] = 0x02; pmt[6] = 0x30; pmt[7] = 0x12;
-  pmt[8] = 0x00; pmt[9] = 0x01; pmt[10] = 0xc1; pmt[11] = 0x00; pmt[12] = 0x00;
+  // table_id = 0x02
+  pmt[5] = 0x02;
+  // section_syntax + section_length
+  pmt[6] = 0xb0; pmt[7] = 0x12;
+  // program_number
+  pmt[8] = 0x00; pmt[9] = 0x01;
+  // version + current_next
+  pmt[10] = 0xc1;
+  // section_number, last_section_number
+  pmt[11] = 0x00; pmt[12] = 0x00;
+  // PCR_PID
   pmt[13] = 0xe1; pmt[14] = 0x01;
-  pmt[15] = 0x00; pmt[16] = 0x00;
-  pmt[17] = 0x1b; pmt[18] = 0xe1; pmt[19] = 0x01; pmt[20] = 0x00; pmt[21] = 0x00;
+  // program_info_length = 0
+  pmt[15] = 0xf0; pmt[16] = 0x00;
+  // stream_type=0x1b (H.264), elementary_PID=0x101
+  pmt[17] = 0x1b; pmt[18] = 0xe1; pmt[19] = 0x01;
+  // ES_info_length = 0
+  pmt[20] = 0xf0; pmt[21] = 0x00;
 
+  // Video PES
   const vidPkt = new Uint8Array(188).fill(0xff);
-  vidPkt[0] = 0x47; vidPkt[1] = 0x40 | 0x01; vidPkt[2] = 0x01; vidPkt[3] = 0x50;
+  vidPkt[0] = 0x47;
+  vidPkt[1] = 0x41; // payload_unit_start=1, PID high=0x01
+  vidPkt[2] = 0x01; // PID low=0x01 → PID=0x101
+  vidPkt[3] = 0x10; // has payload
 
   const pesHdr = [
     0x00, 0x00, 0x01, 0xe0, 0x00, 0x00,

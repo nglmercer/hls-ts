@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'bun:test';
-import { BufferController } from '../src/controller/buffer-controller';
 import { Hls } from '../src/core/Hls';
+import { BufferController } from '../src/controller/buffer-controller';
 
 class MockSourceBuffer {
   updating: boolean = false;

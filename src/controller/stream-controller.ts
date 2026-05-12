@@ -143,25 +143,21 @@ export class StreamController {
   private _processFragment(data: ArrayBuffer, frag: Fragment): void {
     const uint8 = new Uint8Array(data);
 
-    this.hls.trigger(Events.FRAG_PARSING_INIT_SEGMENT, { frag });
-
     try {
       const demuxResult = this._demuxer.demux(uint8, frag.start);
-      const remuxResult = this._remuxer.remux(demuxResult, frag.start * 90000);
+      const baseDts = Math.round(frag.start * 90000);
+      const remuxResult = this._remuxer.remux(demuxResult, baseDts);
 
+      // Append init segment first (contains ftyp + moov with all tracks)
       if (remuxResult.initSegment) {
         this.hls.trigger(Events.FRAG_PARSING_INIT_SEGMENT, { frag, tracks: remuxResult });
         this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.initSegment, type: 'video' });
       }
 
-      if (remuxResult.videoData) {
-        this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.videoData, type: 'video' });
-        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.videoData, type: 'video' });
-      }
-
-      if (remuxResult.audioData) {
-        this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.audioData, type: 'audio' });
-        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.audioData, type: 'audio' });
+      // Append combined media data (moof+mdat for each track, concatenated)
+      if (remuxResult.data) {
+        this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.data, type: 'video' });
+        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.data, type: 'video' });
       }
 
       this.hls.trigger(Events.FRAG_PARSED, { frag });

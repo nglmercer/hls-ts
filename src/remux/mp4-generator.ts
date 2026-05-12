@@ -404,35 +404,25 @@ export function initSegment(tracks: MP4Track[]): Uint8Array {
   return result;
 }
 
+let _sequenceNumber = 0;
+
 export function fragmentBox(track: MP4Track, samples: MP4Sample[], baseDts: number): { moof: Uint8Array; mdat: Uint8Array } {
+  _sequenceNumber++;
+
   const trafBoxes: Uint8Array[] = [
     tfhd(track),
     tfdt(baseDts),
   ];
 
-  const dataOffset = 0; // will be patched
-  const trunBox = trun(samples, dataOffset);
+  const trunBox = trun(samples, 0); // data_offset placeholder, will be patched
   trafBoxes.push(trunBox);
 
   const moof = box(t('moof'),
-    box(t('mfhd'), w8(0), zeros(3), w32(baseDts)), // sequence number as baseDts for simplicity
+    box(t('mfhd'), w8(0), zeros(3), w32(_sequenceNumber)),
     box(t('traf'), ...trafBoxes),
   );
 
-  // Patch trun data_offset
-  const moofSize = moof.byteLength;
-  const actualDataOffset = moofSize + 8;
-  const dv = new DataView(moof.buffer, moof.byteOffset, moof.byteLength);
-  
-  // Find trun box start within moof
-  // moof (8) -> mfhd (16) -> traf (8) -> tfhd (12) -> tfdt (20) -> trun
-  // mfhd: 8 (header) + 8 (payload) = 16
-  // traf header: 8
-  // tfhd: 8 (header) + 4 (id) = 12
-  // tfdt: 8 (header) + 4 (version/flags) + 8 (baseMediaDecodeTime) = 20
-  let trunOffset = 8 + 16 + 8 + 12 + 20; 
-  dv.setInt32(trunOffset + 12, actualDataOffset);
-
+  // Build mdat
   const dataSize = samples.reduce((sum, s) => sum + s.size, 0);
   const mdatBody = new Uint8Array(dataSize);
   let offset = 0;
@@ -442,5 +432,24 @@ export function fragmentBox(track: MP4Track, samples: MP4Sample[], baseDts: numb
   }
   const mdat = box(t('mdat'), mdatBody);
 
+  // Patch trun data_offset: it should point from the start of the moof to the start of the mdat payload
+  // data_offset = moof.byteLength + 8 (mdat header size)
+  const actualDataOffset = moof.byteLength + 8;
+
+  // Scan for trun box within moof to find the data_offset field
+  const trunType = [0x74, 0x72, 0x75, 0x6e];
+  const dv = new DataView(moof.buffer, moof.byteOffset, moof.byteLength);
+  for (let i = 8; i < moof.byteLength - 8; i++) {
+    if (moof[i] === trunType[0] && moof[i + 1] === trunType[1] &&
+        moof[i + 2] === trunType[2] && moof[i + 3] === trunType[3]) {
+      // Found trun box type at offset i (within the box, after the size field)
+      // trun layout after type: version (1) + flags (3) + sample_count (4) + data_offset (4)
+      const dataOffsetFieldPos = i + 4 + 4; // +4 for version+flags, +4 for sample_count
+      dv.setInt32(dataOffsetFieldPos, actualDataOffset);
+      break;
+    }
+  }
+
   return { moof, mdat };
 }
+

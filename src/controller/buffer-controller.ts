@@ -6,25 +6,17 @@ interface CodecInfo {
   audioCodec?: string;
 }
 
-interface BufferQueueItem {
-  data: ArrayBuffer;
-  type: 'video' | 'audio';
-}
-
 export class BufferController {
   private hls: Hls;
   private _mediaSource: MediaSource | null = null;
-  private _videoBuffer: SourceBuffer | null = null;
-  private _audioBuffer: SourceBuffer | null = null;
+  private _sourceBuffer: SourceBuffer | null = null;
   private _media: HTMLMediaElement | null = null;
   private _objectUrl: string = '';
   private _codecs: CodecInfo = {};
-  private _videoQueue: ArrayBuffer[] = [];
-  private _audioQueue: ArrayBuffer[] = [];
-  private _videoAppending: boolean = false;
-  private _audioAppending: boolean = false;
-  private _onMediaSourceOpen: (() => void) | null = null;
-  private _onMediaSourceEnded: (() => void) | null = null;
+  private _queue: ArrayBuffer[] = [];
+  private _appending: boolean = false;
+  private _sourceBufferReady: boolean = false;
+  private _pendingCodecs: CodecInfo | null = null;
 
   constructor(hls: Hls) {
     this.hls = hls;
@@ -34,18 +26,18 @@ export class BufferController {
     this._cleanMediaSource();
   }
 
-  private _onMediaAttached = ({ media }: { media: HTMLMediaElement }): void => {
+  _onMediaAttached = ({ media }: { media: HTMLMediaElement }): void => {
     this._media = media;
     if (typeof MediaSource !== 'undefined') {
       this._createMediaSource();
     }
   };
 
-  private _onMediaDetached = (): void => {
+  _onMediaDetached = (): void => {
     this._cleanMediaSource();
   };
 
-  private _onManifestParsed = (data: { levels: any[]; audioTracks: any[] }): void => {
+  _onManifestParsed = (data: { levels: any[]; audioTracks: any[] }): void => {
     if (data.levels.length > 0) {
       const level = data.levels[0];
       const codecs = this._parseCodecs(level);
@@ -53,28 +45,25 @@ export class BufferController {
     }
   };
 
-  private _onBufferCodecs = (data: CodecInfo): void => {
+  _onBufferCodecs = (data: CodecInfo): void => {
     this._codecs = data;
-    this._createSourceBuffers();
-  };
-
-  private _onBufferAppending = (data: { data: ArrayBuffer; type: 'video' | 'audio' }): void => {
-    if (data.type === 'video') {
-      this._videoQueue.push(data.data);
-      this._processVideoQueue();
+    if (this._mediaSource && this._mediaSource.readyState === 'open') {
+      this._createSourceBuffer();
     } else {
-      this._audioQueue.push(data.data);
-      this._processAudioQueue();
+      this._pendingCodecs = data;
     }
   };
 
-  private _onBufferFlushing = (data: { startOffset: number; endOffset: number }): void => {
-    [this._videoBuffer, this._audioBuffer].forEach(sb => {
-      if (!sb || sb.updating) return;
-      try {
-        sb.remove(data.startOffset, data.endOffset);
-      } catch {}
-    });
+  _onBufferAppending = (data: { data: ArrayBuffer; type: 'video' | 'audio' }): void => {
+    this._queue.push(data.data);
+    this._processQueue();
+  };
+
+  _onBufferFlushing = (data: { startOffset: number; endOffset: number }): void => {
+    if (!this._sourceBuffer || this._sourceBuffer.updating) return;
+    try {
+      this._sourceBuffer.remove(data.startOffset, data.endOffset);
+    } catch { /* ignore */ }
   };
 
   private _createMediaSource(): void {
@@ -86,28 +75,21 @@ export class BufferController {
     this._objectUrl = URL.createObjectURL(ms);
     this._media.src = this._objectUrl;
 
-    this._onMediaSourceOpen = () => {
-      this._createSourceBuffers();
+    const onSourceOpen = () => {
+      ms.removeEventListener('sourceopen', onSourceOpen);
+      if (this._pendingCodecs) {
+        this._codecs = this._pendingCodecs;
+        this._pendingCodecs = null;
+      }
+      this._createSourceBuffer();
     };
-    this._onMediaSourceEnded = () => {};
 
-    ms.addEventListener('sourceopen', this._onMediaSourceOpen);
-    ms.addEventListener('sourceended', this._onMediaSourceEnded);
+    ms.addEventListener('sourceopen', onSourceOpen);
   }
 
   private _cleanMediaSource(): void {
-    if (this._onMediaSourceOpen && this._mediaSource) {
-      this._mediaSource.removeEventListener('sourceopen', this._onMediaSourceOpen);
-    }
-    if (this._onMediaSourceEnded && this._mediaSource) {
-      this._mediaSource.removeEventListener('sourceended', this._onMediaSourceEnded);
-    }
-
-    if (this._videoBuffer && this._mediaSource?.readyState === 'open') {
-      try { this._mediaSource.removeSourceBuffer(this._videoBuffer); } catch {}
-    }
-    if (this._audioBuffer && this._mediaSource?.readyState === 'open') {
-      try { this._mediaSource.removeSourceBuffer(this._audioBuffer); } catch {}
+    if (this._sourceBuffer && this._mediaSource?.readyState === 'open') {
+      try { this._mediaSource.removeSourceBuffer(this._sourceBuffer); } catch { /* ignore */ }
     }
 
     if (this._objectUrl) {
@@ -115,63 +97,60 @@ export class BufferController {
     }
 
     this._mediaSource = null;
-    this._videoBuffer = null;
-    this._audioBuffer = null;
+    this._sourceBuffer = null;
     this._objectUrl = '';
-    this._videoQueue = [];
-    this._audioQueue = [];
-    this._videoAppending = false;
-    this._audioAppending = false;
-    this._onMediaSourceOpen = null;
-    this._onMediaSourceEnded = null;
+    this._queue = [];
+    this._appending = false;
+    this._sourceBufferReady = false;
+    this._pendingCodecs = null;
   }
 
-  private _createSourceBuffers(): void {
+  private _createSourceBuffer(): void {
     if (!this._mediaSource || this._mediaSource.readyState !== 'open') return;
+    if (this._sourceBuffer) return;
 
-    if (this._codecs.videoCodec && !this._videoBuffer) {
-      const mime = `video/mp4; codecs="${this._codecs.videoCodec}"`;
-      if (MediaSource.isTypeSupported(mime)) {
-        this._videoBuffer = this._mediaSource.addSourceBuffer(mime);
-        this._videoBuffer.addEventListener('updateend', () => {
-          this._videoAppending = false;
-          this._processVideoQueue();
-        });
-      }
+    // Build a combined MIME type for both video and audio
+    const codecParts: string[] = [];
+    if (this._codecs.videoCodec) codecParts.push(this._codecs.videoCodec);
+    if (this._codecs.audioCodec) codecParts.push(this._codecs.audioCodec);
+
+    if (codecParts.length === 0) {
+      codecParts.push('avc1.42e01e');
     }
 
-    if (this._codecs.audioCodec && !this._audioBuffer) {
-      const mime = `audio/mp4; codecs="${this._codecs.audioCodec}"`;
-      if (MediaSource.isTypeSupported(mime)) {
-        this._audioBuffer = this._mediaSource.addSourceBuffer(mime);
-        this._audioBuffer.addEventListener('updateend', () => {
-          this._audioAppending = false;
-          this._processAudioQueue();
-        });
-      }
-    }
+    const mime = `video/mp4; codecs="${codecParts.join(',')}"`;
 
-    this._processVideoQueue();
-    this._processAudioQueue();
-  }
-
-  private _processVideoQueue(): void {
-    if (!this._videoBuffer || this._videoAppending || this._videoQueue.length === 0) return;
     try {
-      this._videoAppending = true;
-      this._videoBuffer.appendBuffer(this._videoQueue.shift()!);
+      if (MediaSource.isTypeSupported(mime)) {
+        this._sourceBuffer = this._mediaSource.addSourceBuffer(mime);
+        this._sourceBufferReady = true;
+        this._sourceBuffer.addEventListener('updateend', () => {
+          this._appending = false;
+          this._processQueue();
+        });
+        this._sourceBuffer.addEventListener('error', (e) => {
+          console.error('[BufferController] SourceBuffer error', e);
+          this._appending = false;
+        });
+        this._processQueue();
+      } else {
+        console.error(`[BufferController] MIME type not supported: ${mime}`);
+      }
     } catch (err) {
-      this._videoAppending = false;
+      console.error('[BufferController] Error creating SourceBuffer:', err);
     }
   }
 
-  private _processAudioQueue(): void {
-    if (!this._audioBuffer || this._audioAppending || this._audioQueue.length === 0) return;
+  private _processQueue(): void {
+    if (!this._sourceBuffer || this._appending || this._queue.length === 0) return;
+    if (this._sourceBuffer.updating) return;
     try {
-      this._audioAppending = true;
-      this._audioBuffer.appendBuffer(this._audioQueue.shift()!);
+      this._appending = true;
+      const data = this._queue.shift()!;
+      this._sourceBuffer.appendBuffer(data);
     } catch (err) {
-      this._audioAppending = false;
+      console.error('[BufferController] appendBuffer error:', err);
+      this._appending = false;
     }
   }
 
@@ -190,7 +169,7 @@ export class BufferController {
     }
     // Fallback if none found
     if (!codecInfo.videoCodec && !codecInfo.audioCodec) {
-        codecInfo.videoCodec = 'avc1.42e01e';
+      codecInfo.videoCodec = 'avc1.42e01e';
     }
     return codecInfo;
   }

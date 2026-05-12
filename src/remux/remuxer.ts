@@ -1,4 +1,4 @@
-import { TSDemuxer, type DemuxResult, type DemuxedVideoTrack, type DemuxedAudioTrack } from './tsdemuxer';
+import type { DemuxResult, DemuxedVideoTrack, DemuxedAudioTrack } from './tsdemuxer';
 import { initSegment, fragmentBox, type MP4Track, type MP4Sample } from './mp4-generator';
 
 export interface RemuxResult {
@@ -51,6 +51,7 @@ export class Remuxer {
       this._remuxAudio(demuxResult.audioTrack);
     }
 
+    // Build init segment with all tracks (video + audio combined)
     if (!this._initSent) {
       const tracks: MP4Track[] = [];
       if (this._videoTrack) {
@@ -68,6 +69,8 @@ export class Remuxer {
     const videoSamples = this._videoTrack?.samples || [];
     const audioSamples = this._audioTrack?.samples || [];
 
+    // Generate separate moof+mdat for video and audio tracks
+    // Each track gets its own fragment since they have different timescales
     if (videoSamples.length > 0) {
       const track = this._videoTrack!;
       const mp4Track = this._toMP4Track(track);
@@ -86,10 +89,11 @@ export class Remuxer {
       result.audioTrack = track;
     }
 
-    if (result.videoData || result.audioData) {
-      const parts: Uint8Array[] = [];
-      if (result.videoData) parts.push(result.videoData);
-      if (result.audioData) parts.push(result.audioData);
+    // Combine all fragment data into a single buffer for the single SourceBuffer
+    const parts: Uint8Array[] = [];
+    if (result.videoData) parts.push(result.videoData);
+    if (result.audioData) parts.push(result.audioData);
+    if (parts.length > 0) {
       result.data = concat(...parts);
     }
 
