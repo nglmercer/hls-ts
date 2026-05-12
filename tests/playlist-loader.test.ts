@@ -18,12 +18,12 @@ describe('PlaylistLoader', () => {
 
   it('should handle load error with bad URL', async () => {
     const loader = new PlaylistLoader();
-    const result = await new Promise<any>((resolve) => {
+    const result = await new Promise<{ type: string; data?: string; code?: number }>((resolve) => {
       loader.load(
         { url: 'https://nonexistent.invalid/manifest.m3u8' },
         {
-          onSuccess: (r) => resolve({ type: 'success', data: r.data }),
-          onError: (err) => resolve({ type: 'error', code: err.code }),
+          onSuccess: (r: { data: string }) => resolve({ type: 'success', data: r.data }),
+          onError: (err: { code: number }) => resolve({ type: 'error', code: err.code }),
           onTimeout: () => resolve({ type: 'timeout' }),
         },
       );

@@ -380,6 +380,8 @@ class AvcStream {
   private _lastDts: number = 0;
 
   parse(data: Uint8Array, pts: number, dts: number, demuxer: TSDemuxer): void {
+    this.flush(demuxer);
+
     this._lastPts = pts;
     this._lastDts = dts;
 
@@ -413,6 +415,10 @@ class AvcStream {
       }
 
       this._naluData.push(nalu);
+    }
+
+    if (this._naluData.length > 0) {
+      this.flush(demuxer);
     }
   }
 

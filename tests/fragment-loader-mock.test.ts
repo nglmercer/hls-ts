@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { FragmentLoader } from '../src/loader/fragment-loader';
+import { type Fragment } from '../src/types';
 
 const originalFetch = globalThis.fetch;
 
 function mockFetch(response: Partial<Response> | Error): void {
-  (globalThis as any).fetch = async () => {
+  (globalThis as unknown as { fetch: any }).fetch = async () => {
     if (response instanceof Error) throw response;
     return response as Response;
   };
@@ -31,9 +32,9 @@ describe('FragmentLoader - fetch mocking', () => {
     } as Response);
 
     const loader = new FragmentLoader({ maxNumRetry: 0, retryDelayMs: 0, maxRetryDelayMs: 0 });
-    const result = await new Promise<any>((resolve) => {
+    const result = await new Promise<{ type: string; code?: number; text?: string }>((resolve) => {
       loader.load(
-        { url: 'http://test.com/seg.ts', frag: {} as any },
+        { url: 'http://test.com/seg.ts', frag: {} as unknown as Fragment },
         {
           onSuccess: () => resolve({ type: 'success' }),
           onError: (err) => resolve({ type: 'error', code: err.code, text: err.text }),
@@ -52,12 +53,12 @@ describe('FragmentLoader - fetch mocking', () => {
       status: 200,
       body: null,
       arrayBuffer: async () => data.buffer as ArrayBuffer,
-    } as any);
+    } as unknown as Response);
 
     const loader = new FragmentLoader({ maxNumRetry: 0, retryDelayMs: 0, maxRetryDelayMs: 0 });
-    const result = await new Promise<any>((resolve) => {
+    const result = await new Promise<{ type: string; size?: number }>((resolve) => {
       loader.load(
-        { url: 'http://test.com/seg.ts', frag: {} as any },
+        { url: 'http://test.com/seg.ts', frag: {} as unknown as Fragment },
         {
           onSuccess: (response) => resolve({ type: 'success', size: response.data.byteLength }),
           onError: () => resolve({ type: 'error' }),
@@ -84,20 +85,20 @@ describe('FragmentLoader - fetch mocking', () => {
       cancel: async () => {},
       releaseLock: () => {},
       closed: Promise.resolve(undefined),
-    } as any;
+    } as unknown as ReadableStreamDefaultReader;
 
-    const body: ReadableStream = { getReader: () => reader } as any;
+    const body: ReadableStream = { getReader: () => reader } as unknown as ReadableStream;
 
     mockFetch({
       ok: true,
       status: 200,
       body,
-    } as any);
+    } as unknown as Response);
 
     const loader = new FragmentLoader({ maxNumRetry: 0, retryDelayMs: 0, maxRetryDelayMs: 0 });
-    const result = await new Promise<any>((resolve) => {
+    const result = await new Promise<{ type: string; size?: number }>((resolve) => {
       loader.load(
-        { url: 'http://test.com/seg.ts', frag: {} as any },
+        { url: 'http://test.com/seg.ts', frag: {} as unknown as Fragment },
         {
           onSuccess: (response) => resolve({ type: 'success', size: response.data.byteLength }),
           onError: () => resolve({ type: 'error' }),
@@ -121,16 +122,16 @@ describe('FragmentLoader - fetch mocking', () => {
       cancel: async () => {},
       releaseLock: () => {},
       closed: Promise.resolve(undefined),
-    } as any;
+    } as unknown as ReadableStreamDefaultReader;
 
-    const body: ReadableStream = { getReader: () => reader } as any;
-    mockFetch({ ok: true, status: 200, body } as any);
+    const body: ReadableStream = { getReader: () => reader } as unknown as ReadableStream;
+    mockFetch({ ok: true, status: 200, body } as unknown as Response);
 
     const loader = new FragmentLoader({ maxNumRetry: 0, retryDelayMs: 0, maxRetryDelayMs: 0 });
     let progressCalled = false;
-    const result = await new Promise<any>((resolve) => {
+    const result = await new Promise<{ type: string }>((resolve) => {
       loader.load(
-        { url: 'http://test.com/seg.ts', frag: {} as any },
+        { url: 'http://test.com/seg.ts', frag: {} as unknown as Fragment },
         {
           onSuccess: () => resolve({ type: 'success' }),
           onError: () => resolve({ type: 'error' }),
@@ -149,9 +150,9 @@ describe('FragmentLoader - fetch mocking', () => {
     const loader = new FragmentLoader(
       { maxNumRetry: 0, retryDelayMs: 0, maxRetryDelayMs: 0 },
     );
-    const result = await new Promise<any>((resolve) => {
+    const result = await new Promise<{ type: string; text?: string }>((resolve) => {
       loader.load(
-        { url: 'http://test.com/seg.ts', frag: {} as any },
+        { url: 'http://test.com/seg.ts', frag: {} as unknown as Fragment },
         {
           onSuccess: () => resolve({ type: 'success' }),
           onError: (err) => resolve({ type: 'error', text: err.text }),
@@ -164,19 +165,19 @@ describe('FragmentLoader - fetch mocking', () => {
 
   it('should retry on fetch error and eventually succeed', async () => {
     let attempts = 0;
-    (globalThis as any).fetch = async () => {
+    (globalThis as unknown as { fetch: any }).fetch = async () => {
       attempts++;
       if (attempts === 1) throw new Error('First attempt failed');
-      return { ok: true, status: 200, body: null, arrayBuffer: async () => new ArrayBuffer(1) } as any;
+      return { ok: true, status: 200, body: null, arrayBuffer: async () => new ArrayBuffer(1) } as unknown as Response;
     };
 
     const loader = new FragmentLoader(
       { maxNumRetry: 2, retryDelayMs: 0, maxRetryDelayMs: 0, backoff: 'linear' },
       5000,
     );
-    const result = await new Promise<any>((resolve) => {
+    const result = await new Promise<{ type: string; attempts?: number }>((resolve) => {
       loader.load(
-        { url: 'http://test.com/seg.ts', frag: {} as any },
+        { url: 'http://test.com/seg.ts', frag: {} as unknown as Fragment },
         {
           onSuccess: () => resolve({ type: 'success', attempts }),
           onError: () => resolve({ type: 'error' }),
@@ -193,16 +194,16 @@ describe('FragmentLoader - fetch mocking', () => {
       { maxNumRetry: 5, retryDelayMs: 1000, maxRetryDelayMs: 10000, backoff: 'exponential' },
     );
     // Access private _getRetryDelay method
-    const getDelay = (loader as any)._getRetryDelay.bind(loader);
-    (loader as any)._retryCount = 0;
+    const getDelay = (loader as unknown as { _getRetryDelay: () => number })._getRetryDelay.bind(loader);
+    (loader as unknown as { _retryCount: number })._retryCount = 0;
     expect(getDelay()).toBe(1000);
-    (loader as any)._retryCount = 1;
+    (loader as unknown as { _retryCount: number })._retryCount = 1;
     expect(getDelay()).toBe(2000);
-    (loader as any)._retryCount = 2;
+    (loader as unknown as { _retryCount: number })._retryCount = 2;
     expect(getDelay()).toBe(4000);
-    (loader as any)._retryCount = 3;
+    (loader as unknown as { _retryCount: number })._retryCount = 3;
     expect(getDelay()).toBe(8000);
-    (loader as any)._retryCount = 4;
+    (loader as unknown as { _retryCount: number })._retryCount = 4;
     expect(getDelay()).toBe(10000); // capped at maxRetryDelayMs
   });
 
@@ -210,12 +211,12 @@ describe('FragmentLoader - fetch mocking', () => {
     const loader = new FragmentLoader(
       { maxNumRetry: 5, retryDelayMs: 1000, maxRetryDelayMs: 5000, backoff: 'linear' },
     );
-    const getDelay = (loader as any)._getRetryDelay.bind(loader);
-    (loader as any)._retryCount = 1;
+    const getDelay = (loader as unknown as { _getRetryDelay: () => number })._getRetryDelay.bind(loader);
+    (loader as unknown as { _retryCount: number })._retryCount = 1;
     expect(getDelay()).toBe(1000);
-    (loader as any)._retryCount = 3;
+    (loader as unknown as { _retryCount: number })._retryCount = 3;
     expect(getDelay()).toBe(3000);
-    (loader as any)._retryCount = 10;
+    (loader as unknown as { _retryCount: number })._retryCount = 10;
     expect(getDelay()).toBe(5000); // capped
   });
 });

@@ -39,12 +39,12 @@ describe('ErrorController', () => {
     };
     const ec = new ErrorController(hlsMock);
 
-    (ec as any)._onError({
+    (ec as unknown as { _onError: (data: any) => void })._onError({
       type: ErrorTypes.NETWORK_ERROR,
       details: 'fragLoadError',
       fatal: true,
       reason: 'Network failure',
-      frag: { url: 'http://example.com/seg1.ts', sn: 1, level: 0 },
+      frag: { url: 'http://example.com/seg1.ts', sn: 1, level: 0 } as any,
     });
   });
 
@@ -62,7 +62,7 @@ describe('ErrorController', () => {
     };
     const ec = new ErrorController(hlsMock);
 
-    (ec as any)._onError({
+    (ec as unknown as { _onError: (data: any) => void })._onError({
       type: ErrorTypes.MEDIA_ERROR,
       details: 'bufferAppendError',
       fatal: true,

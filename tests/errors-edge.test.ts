@@ -3,10 +3,18 @@ import { ErrorTypes } from '../src/types/errors';
 import { ErrorController } from '../src/controller/error-controller';
 
 describe('ErrorController - edge cases', () => {
-  let mockHls: any;
+  let mockHls: {
+    config: { fragLoadPolicy: { errorRetry: { maxNumRetry: number } } };
+    url: string;
+    trigger: (event: string, data?: any) => void;
+    levels: { id: number }[];
+    media: any | null;
+    detachMedia: () => void;
+    attachMedia: (m: any) => void;
+  };
 
   beforeEach(() => {
-    const events: any[] = [];
+    const events: { event: string; data: any }[] = [];
     mockHls = {
       config: { fragLoadPolicy: { errorRetry: { maxNumRetry: 3 } } },
       url: 'http://example.com/manifest.m3u8',
@@ -26,12 +34,12 @@ describe('ErrorController - edge cases', () => {
       if (event === 'levelLoading') triggered = true;
     };
 
-    (ec as any)._onError({
+    (ec as unknown as { _onError: (data: any) => void })._onError({
       type: ErrorTypes.NETWORK_ERROR,
       details: 'fragLoadError',
       fatal: true,
       reason: 'timeout',
-      frag: { url: 'http://example.com/seg1.ts', sn: 0, level: 0 },
+      frag: { url: 'http://example.com/seg1.ts', sn: 0, level: 0 } as any,
     });
 
     // The setTimeout should be created for backoff retry
@@ -40,7 +48,7 @@ describe('ErrorController - edge cases', () => {
 
   it('should handle network error without frag url (no retry)', () => {
     const ec = new ErrorController(mockHls);
-    (ec as any)._onError({
+    (ec as unknown as { _onError: (data: any) => void })._onError({
       type: ErrorTypes.NETWORK_ERROR,
       details: 'manifestLoadError',
       fatal: true,
@@ -64,7 +72,7 @@ describe('ErrorController - edge cases', () => {
 
     const ec = new ErrorController(mockHls);
 
-    (ec as any)._onError({
+    (ec as unknown as { _onError: (data: any) => void })._onError({
       type: ErrorTypes.MEDIA_ERROR,
       details: 'bufferAppendError',
       fatal: true,
@@ -82,7 +90,7 @@ describe('ErrorController - edge cases', () => {
     mockHls.attachMedia = () => {};
 
     const ec = new ErrorController(mockHls);
-    (ec as any)._onError({
+    (ec as unknown as { _onError: (data: any) => void })._onError({
       type: ErrorTypes.MEDIA_ERROR,
       details: 'bufferAppendError',
       fatal: true,
@@ -99,12 +107,12 @@ describe('ErrorController - edge cases', () => {
     };
 
     const ec = new ErrorController(mockHls);
-    (ec as any)._onError({
+    (ec as unknown as { _onError: (data: any) => void })._onError({
       type: ErrorTypes.MUX_ERROR,
       details: 'fragParsingError',
       fatal: true,
       reason: 'parsing error',
-      frag: { url: 'seg.ts', sn: 5, level: 2 },
+      frag: { url: 'seg.ts', sn: 5, level: 2 } as any,
     });
 
     // setTimeout should lower level from 2 to 1
@@ -114,24 +122,24 @@ describe('ErrorController - edge cases', () => {
   it('should handle mux error with single level (no fallback)', () => {
     mockHls.levels = [{ id: 0 }];
     const ec = new ErrorController(mockHls);
-    (ec as any)._onError({
+    (ec as unknown as { _onError: (data: any) => void })._onError({
       type: ErrorTypes.MUX_ERROR,
       details: 'fragParsingError',
       fatal: true,
       reason: 'error',
-      frag: { url: 'seg.ts', sn: 0, level: 0 },
+      frag: { url: 'seg.ts', sn: 0, level: 0 } as any,
     });
     // levels.length <= 1 → no action
   });
 
   it('should handle mux error without frag level', () => {
     const ec = new ErrorController(mockHls);
-    (ec as any)._onError({
+    (ec as unknown as { _onError: (data: any) => void })._onError({
       type: ErrorTypes.MUX_ERROR,
       details: 'fragParsingError',
       fatal: true,
       reason: 'error',
-      frag: { url: 'seg.ts', sn: 0, level: undefined as any },
+      frag: { url: 'seg.ts', sn: 0, level: undefined as unknown as number } as any,
     });
     // levelId === undefined → early return
   });

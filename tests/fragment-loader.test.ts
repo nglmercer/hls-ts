@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { FragmentLoader } from '../src/loader/fragment-loader';
+import { type Fragment } from '../src/types';
 
 describe('FragmentLoader', () => {
   it('should create with default retry config', () => {
@@ -33,14 +34,14 @@ describe('FragmentLoader', () => {
   it('should trigger onError for non-ok response', async () => {
     const loader = new FragmentLoader(undefined, 5000);
     const url = 'https://httpbin.org/status/404';
-    const frag = { url, sn: 0, level: 0, duration: 10, start: 0, cc: 0, byteRangeStart: 0, byteRangeEnd: 0, programDateTime: 0, initSegment: null, tagList: [] as string[][], stats: loader.stats };
-    const result: any = await new Promise((resolve) => {
+    const frag = { url, sn: 0, level: 0, duration: 10, start: 0, cc: 0, byteRangeStart: 0, byteRangeEnd: 0, programDateTime: 0, initSegment: null, tagList: [] as string[][], stats: loader.stats } as Fragment;
+    const result = await new Promise<{ type: string; code?: number; text?: string }>((resolve) => {
       const callbacks = {
         onSuccess: () => resolve({ type: 'success' }),
-        onError: (err: any) => resolve({ type: 'error', code: err.code, text: err.text }),
+        onError: (err: { code: number; text: string }) => resolve({ type: 'error', code: err.code, text: err.text }),
         onTimeout: () => resolve({ type: 'timeout' }),
       };
-      loader.load({ url, frag: frag as any }, callbacks);
+      loader.load({ url, frag }, callbacks);
     });
 
     expect(result.type).toBe('error');
@@ -50,13 +51,13 @@ describe('FragmentLoader', () => {
     const loader = new FragmentLoader({ maxNumRetry: 0, retryDelayMs: 0, maxRetryDelayMs: 0 }, 1000);
     const url = 'https://nonexistent.example.com/segment.ts';
 
-    const result: any = await new Promise((resolve) => {
+    const result = await new Promise<{ type: string; code?: number; text?: string; ctx?: any }>((resolve) => {
       const callbacks = {
         onSuccess: () => resolve({ type: 'success' }),
-        onError: (err: any) => resolve({ type: 'error', code: err.code, text: err.text }),
+        onError: (err: { code: number; text: string }) => resolve({ type: 'error', code: err.code, text: err.text }),
         onTimeout: (_stats: any, ctx: any) => resolve({ type: 'timeout', ctx }),
       };
-      loader.load({ url, frag: {} as any }, callbacks);
+      loader.load({ url, frag: {} as unknown as Fragment }, callbacks);
     });
 
     expect(['error', 'timeout']).toContain(result.type);

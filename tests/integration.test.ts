@@ -1,17 +1,17 @@
 import { describe, it, expect, spyOn } from 'bun:test';
 import { Hls } from '../src/core/Hls';
-import { Events, ErrorTypes, ErrorDetails } from '../src/types';
+import { Events, ErrorTypes, type HlsError } from '../src/types';
 import { BufferController } from '../src/controller/buffer-controller';
 
 describe('Hls Integration', () => {
   it('should emit MEDIA_ATTACHED when attachMedia is called', () => {
     const hls = new Hls();
-    let eventData: any = null;
-    hls.on(Events.MEDIA_ATTACHED, (data: any) => { eventData = data; });
-    const video = { src: '' } as any;
+    let eventData: { media: HTMLVideoElement } | null = null;
+    hls.on(Events.MEDIA_ATTACHED, (data: { media: HTMLVideoElement }) => { eventData = data; });
+    const video = { src: '' } as unknown as HTMLVideoElement;
     hls.attachMedia(video);
     expect(eventData).not.toBeNull();
-    expect(eventData.media).toBe(video);
+    expect(eventData!.media).toBe(video);
   });
 
   it('should emit MEDIA_DETACHED when detachMedia is called', () => {
@@ -33,7 +33,7 @@ describe('Hls Integration', () => {
   it('should clear media and url on destroy', () => {
     const hls = new Hls();
     hls.loadSource('http://example.com/manifest.m3u8');
-    hls.attachMedia({} as any);
+    hls.attachMedia({} as unknown as HTMLVideoElement);
     hls.destroy();
     expect(hls.media).toBeNull();
     expect(hls.url).toBeNull();
@@ -58,7 +58,7 @@ describe('Hls Integration', () => {
   it('should have static defaultConfig', () => {
     expect(Hls.defaultConfig).toBeUndefined();
     const prevDefault = Hls.defaultConfig;
-    Hls.defaultConfig = { startLevel: 2 } as any;
+    (Hls as unknown as { defaultConfig: any }).defaultConfig = { startLevel: 2 } as any;
     const hls = new Hls();
     expect(hls.config.startLevel).toBe(2);
     expect(hls.config.maxBufferLength).toBe(30);
@@ -72,12 +72,12 @@ describe('Hls Integration', () => {
 
   it('should flag event on error trigger', () => {
     const hls = new Hls();
-    let errorEvent: any = null;
-    hls.on(Events.ERROR, (data: any) => { errorEvent = data; });
+    let errorEvent: HlsError | null = null;
+    hls.on(Events.ERROR, (data: HlsError) => { errorEvent = data; });
     hls.trigger(Events.ERROR, { type: ErrorTypes.NETWORK_ERROR, details: 'manifestLoadError', fatal: true, reason: 'test' });
     expect(errorEvent).not.toBeNull();
-    expect(errorEvent.type).toBe('networkError');
-    expect(errorEvent.fatal).toBe(true);
+    expect(errorEvent!.type).toBe('networkError');
+    expect(errorEvent!.fatal).toBe(true);
   });
 
   it('should support level events lifecycle', () => {
