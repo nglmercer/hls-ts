@@ -38,7 +38,7 @@ export class CapLevelController {
     }
   }
 
-  private _onMediaAttached = (data: { media: HTMLMediaElement }): void => {
+  public _onMediaAttached = (data: { media: HTMLMediaElement }): void => {
     this._media = data.media;
     this._resizeHandler = () => this._onResize();
     if (typeof window !== 'undefined') {
@@ -47,14 +47,14 @@ export class CapLevelController {
     this._onResize();
   };
 
-  private _onMediaDetached = (): void => {
+  public _onMediaDetached = (): void => {
     if (typeof window !== 'undefined' && this._resizeHandler) {
       window.removeEventListener('resize', this._resizeHandler);
     }
     this._media = null;
   };
 
-  private _onManifestParsed = (data: { levels: Level[] }): void => {
+  public _onManifestParsed = (data: { levels: Level[] }): void => {
     this._levels = data.levels.length;
     this._onResize();
   };

@@ -13,7 +13,7 @@ export class LevelController {
   private _currentLevel: Level | null = null;
   private _playlistLoader: PlaylistLoader;
   private _abrController: AbrController;
-  private _livePollInterval: any = null;
+  private _livePollInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(hls: Hls, abrController: AbrController) {
     this.hls = hls;
@@ -58,8 +58,8 @@ export class LevelController {
                 ...result,
               });
             },
-            onError: () => {}, // silent retry on interval
-            onTimeout: () => {},
+            onError: () => { }, // silent retry on interval
+            onTimeout: () => { },
           }
         );
       }
@@ -87,14 +87,14 @@ export class LevelController {
     }
   };
 
-  _onLevelLoading = (_data: { url: string }): void => {};
+  _onLevelLoading = (_data: { url: string }): void => { };
 
-  _onLevelLoaded = (data: { url: string; fragments: any[]; targetduration: number; live: boolean; type: string; initSegment: any }): void => {
+  _onLevelLoaded = (data: { url: string; fragments: Record<string, unknown>[]; targetduration: number; live: boolean; type: string; initSegment: unknown }): void => {
     const level = this._levels.find(l => l.url === data.url);
     if (!level) return;
 
     let totalDuration = 0;
-    const fragments = data.fragments.map((f: any) => {
+    const fragments = data.fragments.map((f: Record<string, unknown>) => {
       const frag = {
         url: f.url,
         sn: f.sn,
@@ -109,27 +109,27 @@ export class LevelController {
         tagList: f.tagList || [],
         stats: { loaded: 0, total: 0, trequest: 0, tfirst: 0, tload: 0, aborted: false, loading: false },
       };
-      totalDuration += f.duration;
+      totalDuration += Number(f.duration);
       return frag;
     });
 
     level.details = {
       version: 1,
-      targetduration: data.targetduration,
+      targetduration: Number(data.targetduration),
       totalduration: totalDuration,
-      startSN: data.fragments[0]?.sn ?? 0,
-      endSN: data.fragments[data.fragments.length - 1]?.sn ?? 0,
+      startSN: Number(data.fragments[0]?.sn ?? 0),
+      endSN: Number(data.fragments[data.fragments.length - 1]?.sn ?? 0),
       fragStart: 0,
-      fragments,
-      live: data.live,
-      type: data.type,
+      fragments: fragments as any[],
+      live: data.live as boolean,
+      type: data.type as string,
       updated: Date.now(),
       advanced: false,
       availabilityDelay: 0,
     };
 
     if (data.live && !this._livePollInterval) {
-      this._startLivePolling(data.targetduration);
+      this._startLivePolling(Number(data.targetduration));
     } else if (!data.live && this._livePollInterval) {
       clearInterval(this._livePollInterval);
       this._livePollInterval = null;

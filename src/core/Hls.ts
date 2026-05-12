@@ -211,13 +211,13 @@ export class Hls implements HlsEventEmitter {
   };
 
   private _wireControllers(): void {
-    const bc = this.bufferController as any;
-    const lc = this.levelController as any;
-    const sc = this.streamController as any;
-    const ac = this.abrController as any;
-    const gc = this.gapController as any;
-    const ec = this.errorController as any;
-    const cc = this.capLevelController as any;
+    const bc = this.bufferController;
+    const lc = this.levelController;
+    const sc = this.streamController;
+    const ac = this.abrController;
+    const gc = this.gapController;
+    const ec = this.errorController;
+    const cc = this.capLevelController;
 
     this.on(Events.MEDIA_ATTACHED, bc._onMediaAttached);
     this.on(Events.MEDIA_DETACHED, bc._onMediaDetached);

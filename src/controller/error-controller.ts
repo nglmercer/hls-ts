@@ -41,7 +41,7 @@ export class ErrorController {
     this._mediaSwapCount = 0;
   }
 
-  private _onError = (error: HlsError): void => {
+  public _onError = (error: HlsError): void => {
     if (!error.fatal) return;
 
     const key = `${error.type}:${error.details}`;
@@ -104,7 +104,7 @@ export class ErrorController {
       setTimeout(() => {
         this.hls.attachMedia(media);
         media.currentTime = currentTime;
-        if (wasPlaying) media.play().catch(() => {});
+        if (wasPlaying) media.play().catch(() => { });
       }, 100);
     }
   }

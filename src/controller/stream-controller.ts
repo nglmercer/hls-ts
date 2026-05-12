@@ -20,6 +20,7 @@ export class StreamController {
   private _loading: boolean = false;
   private _paused: boolean = false;
   private _seeking: boolean = false;
+  private _lastLevel?: number;
   private _pendingData: ArrayBuffer | null = null;
   private _lastCC: Map<number, number> = new Map();
   private _checkBufferTimer: ReturnType<typeof setInterval> | null = null;
@@ -108,6 +109,7 @@ export class StreamController {
     this._fragQueue = [];
     this._fragmentLoader.abort();
     this._transmuxer.reset();
+    this._lastLevel = undefined;
 
     const targetTime = this._media?.currentTime ?? 0;
     if (targetTime > 1) {
@@ -168,17 +170,33 @@ export class StreamController {
       const currentTime = this._media.currentTime;
       let bufferedEnd = 0;
       const buffered = this._media.buffered;
+      
+      // Calculate continuous buffer end, bridging small gaps (up to 1.0s)
       for (let i = 0; i < buffered.length; i++) {
         if (currentTime >= buffered.start(i) && currentTime <= buffered.end(i)) {
           bufferedEnd = buffered.end(i);
+          let j = i + 1;
+          while (j < buffered.length && buffered.start(j) - bufferedEnd <= 1.0) {
+            bufferedEnd = buffered.end(j);
+            j++;
+          }
           break;
         }
       }
+      
+      // If we are not in any range, use the furthest buffered data
       if (bufferedEnd === 0 && buffered.length > 0) {
         bufferedEnd = buffered.end(buffered.length - 1);
       }
 
-      const bufferLen = Math.max(0, bufferedEnd - currentTime);
+      // To absolutely prevent QuotaExceededError on heavily fragmented buffers, 
+      // cap the buffer length by the furthest data point we have downloaded.
+      let furthestEnd = bufferedEnd;
+      if (buffered.length > 0) {
+        furthestEnd = Math.max(furthestEnd, buffered.end(buffered.length - 1));
+      }
+
+      const bufferLen = Math.max(0, furthestEnd - currentTime);
       // Wait if we have buffered more than the max limit
       if (bufferLen >= this.hls.config.maxBufferLength) {
         this._checkBufferTimer = setTimeout(() => this._loadNextFragment(), 1000);
@@ -244,6 +262,11 @@ export class StreamController {
       const lastCC = this._lastCC.get(level);
       const discontinuity = lastCC !== undefined && frag.cc !== lastCC + 1;
       this._lastCC.set(level, frag.cc);
+
+      if (this._lastLevel !== undefined && this._lastLevel !== level) {
+        this._transmuxer.reset();
+      }
+      this._lastLevel = level;
 
       const { remuxResult } = await this._transmuxer.transmux(uint8, frag.start, baseDts, discontinuity);
 

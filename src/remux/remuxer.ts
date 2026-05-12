@@ -44,8 +44,13 @@ export class Remuxer {
   private _sequenceNumber: number = 0;
   private _nextAudioPts: number = -1;
   private _nextVideoPts: number = -1;
+  private _startBaseDts: number = -1;
 
   remux(demuxResult: DemuxResult, baseDts: number): RemuxResult {
+    if (this._startBaseDts === -1) {
+      this._startBaseDts = baseDts;
+    }
+
     const result: RemuxResult = {};
 
     if (demuxResult.videoTrack) {
@@ -86,7 +91,8 @@ export class Remuxer {
       const mp4Track = this._toMP4Track(track);
       const mp4Samples = videoSamples.map(s => this._toMP4Sample(s));
       
-      let videoTfdt = baseDts;
+      // Use the continuous _nextVideoPts, or the anchor _startBaseDts if this is the first sample
+      let videoTfdt = this._startBaseDts;
       if (this._nextVideoPts >= 0) {
         videoTfdt = this._nextVideoPts;
       }
@@ -103,11 +109,11 @@ export class Remuxer {
       const mp4Track = this._toMP4Track(track);
       let mp4Samples = audioSamples.map(s => this._toMP4Sample(s));
 
-      let audioTfdt = baseDts;
+      let audioTfdt = this._startBaseDts;
       if (this._nextAudioPts >= 0) {
         audioTfdt = this._nextAudioPts;
         
-        // Insert silence for significant gaps to catch up to baseDts
+        // Insert silence for significant gaps to catch up to the expected timeline
         const gap = baseDts - this._nextAudioPts;
         if (gap > 3000 && gap < 90000) {
           const silenceFrame = generateSilentFrame(track);
@@ -155,6 +161,7 @@ export class Remuxer {
     this._sequenceNumber = 0;
     this._nextAudioPts = -1;
     this._nextVideoPts = -1;
+    this._startBaseDts = -1;
   }
 
   private _remuxVideo(track: DemuxedVideoTrack): void {

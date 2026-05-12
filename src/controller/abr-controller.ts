@@ -54,9 +54,9 @@ export class AbrController {
     return this._bwEstimate;
   }
 
-  destroy(): void {}
+  destroy(): void { }
 
-  private _onManifestParsed = (data: { levels: Level[] }): void => {
+  public _onManifestParsed = (data: { levels: Level[] }): void => {
     this._levels = data.levels.map((l: Level, i: number) => ({
       id: i,
       bitrate: l.bitrate,
@@ -65,7 +65,7 @@ export class AbrController {
     }));
   };
 
-  private _onFragLoaded = (data: { frag: Fragment; stats: { trequest: number; tfirst: number; tload: number; loaded: number } }): void => {
+  public _onFragLoaded = (data: { frag: Fragment; stats: { trequest: number; tfirst: number; tload: number; loaded: number } }): void => {
     const { stats } = data;
     if (stats.trequest === 0 || stats.tfirst === 0 || stats.loaded === 0) return;
 
@@ -92,7 +92,7 @@ export class AbrController {
     this._lastFragLoadedBytes = stats.loaded;
   };
 
-  private _onLevelLoaded = (data: { level: Level }): void => {
+  public _onLevelLoaded = (data: { level: Level }): void => {
     this._currentLevel = data.level?.id ?? this._currentLevel;
   };
 
@@ -116,25 +116,25 @@ export class GapController {
   private _lastSeek: number = 0;
   private _gapCount: number = 0;
 
-  constructor() {}
+  constructor() { }
 
-  destroy(): void {}
+  destroy(): void { }
 
-  private _onMediaAttached = (data: { media: HTMLMediaElement }): void => {
+  public _onMediaAttached = (data: { media: HTMLMediaElement }): void => {
     this._media = data.media;
     this._lastSeek = 0;
     this._gapCount = 0;
   };
 
-  private _onMediaDetached = (): void => {
+  public _onMediaDetached = (): void => {
     this._media = null;
   };
 
-  private _onBufferFlushed = (): void => {
+  public _onBufferFlushed = (): void => {
     this._checkGap();
   };
 
-  private _onFragBuffered = (): void => {
+  public _onFragBuffered = (): void => {
     this._checkGap();
   };
 

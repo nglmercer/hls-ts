@@ -40,7 +40,7 @@ export class BufferController {
     this._cleanMediaSource();
   };
 
-  _onManifestParsed = (data: { levels: Level[]; audioTracks: any[] }): void => {
+  _onManifestParsed = (data: { levels: Level[]; audioTracks: unknown[] }): void => {
     if (data.levels.length > 0) {
       const level = data.levels[0];
       const codecs = this._parseCodecs(level);
@@ -48,13 +48,13 @@ export class BufferController {
     }
   };
 
-  _onLevelUpdated = (data: { level: Level; details: any }): void => {
+  _onLevelUpdated = (data: { level: Level; details: Record<string, unknown> }): void => {
     if (this._mediaSource && this._mediaSource.readyState === 'open') {
       if (!data.details.live && data.details.totalduration) {
         // Only set duration if it's different and source buffer is not updating
         if (this._mediaSource.duration !== data.details.totalduration && (!this._sourceBuffer || !this._sourceBuffer.updating)) {
           try {
-            this._mediaSource.duration = data.details.totalduration;
+            this._mediaSource.duration = Number(data.details.totalduration);
           } catch (e) {
             console.warn('[BufferController] Failed to set duration:', e);
           }
