@@ -70,6 +70,8 @@ ctx.onmessage = (e: MessageEvent<TransmuxerRequest>) => {
     }
     
     case TransmuxerMessages.RESET:
+      tsDemuxer.discontinuity = true;
+      aacDemuxer.discontinuity = true;
       remuxer.reset();
       break;
   }

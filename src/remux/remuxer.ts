@@ -85,9 +85,17 @@ export class Remuxer {
       const track = this._videoTrack!;
       const mp4Track = this._toMP4Track(track);
       const mp4Samples = videoSamples.map(s => this._toMP4Sample(s));
-      const { moof, mdat } = fragmentBox(mp4Track, mp4Samples, baseDts, ++this._sequenceNumber);
+      
+      let videoTfdt = baseDts;
+      if (this._nextVideoPts >= 0) {
+        videoTfdt = this._nextVideoPts;
+      }
+
+      const { moof, mdat } = fragmentBox(mp4Track, mp4Samples, videoTfdt, ++this._sequenceNumber);
       result.videoData = concat(moof, mdat);
       result.videoTrack = track;
+      
+      this._nextVideoPts = videoTfdt + mp4Samples.reduce((s, x) => s + x.duration, 0);
     }
 
     if (audioSamples.length > 0) {
@@ -95,20 +103,22 @@ export class Remuxer {
       const mp4Track = this._toMP4Track(track);
       let mp4Samples = audioSamples.map(s => this._toMP4Sample(s));
 
-      // Insert silence for gaps
-      if (this._nextAudioPts >= 0 && mp4Samples.length > 0) {
-        const firstSamplePts = mp4Samples[0].cts + baseDts;
-        const gap = firstSamplePts - this._nextAudioPts;
-        if (gap > 0 && gap < 90000) {
+      let audioTfdt = baseDts;
+      if (this._nextAudioPts >= 0) {
+        audioTfdt = this._nextAudioPts;
+        
+        // Insert silence for significant gaps to catch up to baseDts
+        const gap = baseDts - this._nextAudioPts;
+        if (gap > 3000 && gap < 90000) {
           const silenceFrame = generateSilentFrame(track);
           const silenceDuration = Math.round(1024 * 90000 / (track.sampleRate || 44100));
           let silencePts = this._nextAudioPts;
           const filledSamples: typeof mp4Samples = [];
-          while (silencePts + silenceDuration <= firstSamplePts) {
+          while (silencePts + silenceDuration <= baseDts) {
             filledSamples.push({
               size: silenceFrame.length,
               duration: silenceDuration,
-              cts: silencePts - baseDts,
+              cts: 0,
               flags: { isLeading: 0, isDependedOn: 2, hasRedundancy: 0, degradPrio: 0, dependsOn: 2, isSync: true },
               data: silenceFrame,
             });
@@ -119,14 +129,11 @@ export class Remuxer {
         }
       }
 
-      if (mp4Samples.length > 0) {
-        const lastSample = mp4Samples[mp4Samples.length - 1];
-        this._nextAudioPts = lastSample.cts + baseDts + lastSample.duration;
-      }
-
-      const { moof, mdat } = fragmentBox(mp4Track, mp4Samples, baseDts, ++this._sequenceNumber);
+      const { moof, mdat } = fragmentBox(mp4Track, mp4Samples, audioTfdt, ++this._sequenceNumber);
       result.audioData = concat(moof, mdat);
       result.audioTrack = track;
+
+      this._nextAudioPts = audioTfdt + mp4Samples.reduce((s, x) => s + x.duration, 0);
     }
 
     // Combine all fragment data into a single buffer for the single SourceBuffer

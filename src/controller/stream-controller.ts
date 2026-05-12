@@ -130,7 +130,7 @@ export class StreamController {
 
     const frag = this._findFragmentByPTS(targetTime, level.details.fragments);
     if (frag) {
-      this._fragQueue = [frag];
+      this._fragQueue = level.details.fragments.filter(f => f.sn >= frag.sn);
     }
 
     this._seeking = false;
