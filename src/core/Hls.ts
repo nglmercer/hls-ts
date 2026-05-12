@@ -171,6 +171,7 @@ export class Hls implements HlsEventEmitter {
 
     this.on(Events.MEDIA_ATTACHED, sc._onMediaAttached);
     this.on(Events.MEDIA_DETACHED, sc._onMediaDetached);
+    this.on(Events.BUFFER_RESET, sc._onBufferReset);
     this.on(Events.MANIFEST_PARSED, sc._onManifestParsed);
     this.on(Events.LEVEL_UPDATED, sc._onLevelUpdated);
     this.on(Events.FRAG_LOADED, sc._onFragLoaded);

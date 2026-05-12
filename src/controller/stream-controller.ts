@@ -41,6 +41,10 @@ export class StreamController {
     this._media = null;
   };
 
+  _onBufferReset = (): void => {
+    this._transmuxer.reset();
+  };
+
   _onManifestParsed = (_data: ManifestData): void => {
     this._startLoading();
   };

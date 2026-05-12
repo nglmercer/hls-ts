@@ -120,6 +120,8 @@ export class BufferController {
     }
 
     const mime = `video/mp4; codecs="${codecParts.join(',')}"`;
+    console.log(`[BufferController] Creating SourceBuffer with MIME: ${mime}`);
+    console.log(`[BufferController] isTypeSupported: ${MediaSource.isTypeSupported(mime)}`);
 
     try {
       if (MediaSource.isTypeSupported(mime)) {
@@ -132,6 +134,14 @@ export class BufferController {
         this._sourceBuffer.addEventListener('error', (e) => {
           console.error('[BufferController] SourceBuffer error', e);
           this._appending = false;
+          this._sourceBufferReady = false;
+          this._queue = [];
+          this.hls.trigger(Events.ERROR, {
+            type: 'mediaError',
+            details: 'bufferAppendError',
+            fatal: true,
+            reason: 'SourceBuffer error during append',
+          });
         });
         this._processQueue();
       } else {
@@ -143,11 +153,22 @@ export class BufferController {
   }
 
   private _processQueue(): void {
-    if (!this._sourceBuffer || this._appending || this._queue.length === 0) return;
+    if (!this._sourceBuffer || !this._sourceBufferReady || this._appending || this._queue.length === 0) return;
     if (this._sourceBuffer.updating || (this._media && this._media.error)) return;
     try {
       this._appending = true;
       const data = this._queue.shift()!;
+      const u8 = new Uint8Array(data);
+      console.log('[BufferController] appendBuffer', {
+        byteLength: data.byteLength,
+        first16: Array.from(u8.subarray(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(' '),
+      });
+      if (data.byteLength === 0) {
+        console.warn('[BufferController] Skipping zero-length appendBuffer');
+        this._appending = false;
+        this._processQueue();
+        return;
+      }
       this._sourceBuffer.appendBuffer(data);
     } catch (err) {
       console.error('[BufferController] appendBuffer error:', err);

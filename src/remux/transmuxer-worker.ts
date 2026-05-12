@@ -49,12 +49,16 @@ ctx.onmessage = (e: MessageEvent<TransmuxerRequest>) => {
         remuxResult,
       };
       
-      // Transfer buffers for performance
-      const transferables: ArrayBuffer[] = [];
-      if (remuxResult.initSegment) transferables.push(remuxResult.initSegment.buffer);
-      if (remuxResult.data) transferables.push(remuxResult.data.buffer);
-      if (remuxResult.audioData) transferables.push(remuxResult.audioData.buffer);
-      if (remuxResult.videoData) transferables.push(remuxResult.videoData.buffer);
+      // Transfer buffers for performance — deduplicate to avoid neutering shared memory
+      const seen = new Set<ArrayBuffer>();
+      const transferables: Transferable[] = [];
+      for (const key of ['initSegment', 'data', 'audioData', 'videoData'] as const) {
+        const arr = remuxResult[key];
+        if (arr && arr.buffer && !seen.has(arr.buffer as ArrayBuffer)) {
+          seen.add(arr.buffer as ArrayBuffer);
+          transferables.push(arr.buffer as ArrayBuffer);
+        }
+      }
       
       ctx.postMessage(response, transferables);
       break;

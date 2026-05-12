@@ -69,6 +69,10 @@ export class ErrorController {
       const wasPlaying = !media.paused;
       const currentTime = media.currentTime;
 
+      if (error.details === 'bufferAppendError') {
+        this.hls.trigger(Events.BUFFER_RESET, {});
+      }
+
       this.hls.detachMedia();
       setTimeout(() => {
         this.hls.attachMedia(media);

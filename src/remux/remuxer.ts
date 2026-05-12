@@ -52,17 +52,23 @@ export class Remuxer {
     }
 
     // Build init segment with all tracks (video + audio combined)
+    // Don't emit init segment until we have valid SPS/PPS for video
     if (!this._initSent) {
-      const tracks: MP4Track[] = [];
-      if (this._videoTrack) {
-        tracks.push(this._toMP4Track(this._videoTrack));
-      }
-      if (this._audioTrack) {
-        tracks.push(this._toMP4Track(this._audioTrack));
-      }
-      if (tracks.length > 0) {
-        result.initSegment = initSegment(tracks);
-        this._initSent = true;
+      const videoReady = !this._videoTrack || (this._videoTrack.sps.length > 0 && this._videoTrack.pps.length > 0);
+      const audioReady = !this._audioTrack || this._audioTrack.samples.length > 0;
+
+      if (videoReady && (this._videoTrack || this._audioTrack)) {
+        const tracks: MP4Track[] = [];
+        if (this._videoTrack) {
+          tracks.push(this._toMP4Track(this._videoTrack));
+        }
+        if (this._audioTrack) {
+          tracks.push(this._toMP4Track(this._audioTrack));
+        }
+        if (tracks.length > 0) {
+          result.initSegment = initSegment(tracks);
+          this._initSent = true;
+        }
       }
     }
 
