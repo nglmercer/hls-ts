@@ -6,6 +6,11 @@ interface CodecInfo {
   audioCodec?: string;
 }
 
+interface BufferQueueItem {
+  data: ArrayBuffer;
+  type: 'video' | 'audio';
+}
+
 export class BufferController {
   private hls: Hls;
   private _mediaSource: MediaSource | null = null;
@@ -14,8 +19,10 @@ export class BufferController {
   private _media: HTMLMediaElement | null = null;
   private _objectUrl: string = '';
   private _codecs: CodecInfo = {};
-  private _queue: ArrayBuffer[] = [];
-  private _appending: boolean = false;
+  private _videoQueue: ArrayBuffer[] = [];
+  private _audioQueue: ArrayBuffer[] = [];
+  private _videoAppending: boolean = false;
+  private _audioAppending: boolean = false;
   private _onMediaSourceOpen: (() => void) | null = null;
   private _onMediaSourceEnded: (() => void) | null = null;
 
@@ -52,17 +59,22 @@ export class BufferController {
   };
 
   private _onBufferAppending = (data: { data: ArrayBuffer; type: 'video' | 'audio' }): void => {
-    this._queue.push(data.data);
-    this._processQueue();
+    if (data.type === 'video') {
+      this._videoQueue.push(data.data);
+      this._processVideoQueue();
+    } else {
+      this._audioQueue.push(data.data);
+      this._processAudioQueue();
+    }
   };
 
   private _onBufferFlushing = (data: { startOffset: number; endOffset: number }): void => {
-    const sb = this._videoBuffer || this._audioBuffer;
-    if (!sb) return;
-    if (sb.updating) return;
-    try {
-      sb.remove(data.startOffset, data.endOffset);
-    } catch {}
+    [this._videoBuffer, this._audioBuffer].forEach(sb => {
+      if (!sb || sb.updating) return;
+      try {
+        sb.remove(data.startOffset, data.endOffset);
+      } catch {}
+    });
   };
 
   private _createMediaSource(): void {
@@ -106,8 +118,10 @@ export class BufferController {
     this._videoBuffer = null;
     this._audioBuffer = null;
     this._objectUrl = '';
-    this._queue = [];
-    this._appending = false;
+    this._videoQueue = [];
+    this._audioQueue = [];
+    this._videoAppending = false;
+    this._audioAppending = false;
     this._onMediaSourceOpen = null;
     this._onMediaSourceEnded = null;
   }
@@ -115,45 +129,49 @@ export class BufferController {
   private _createSourceBuffers(): void {
     if (!this._mediaSource || this._mediaSource.readyState !== 'open') return;
 
-    if (this._codecs.videoCodec) {
+    if (this._codecs.videoCodec && !this._videoBuffer) {
       const mime = `video/mp4; codecs="${this._codecs.videoCodec}"`;
       if (MediaSource.isTypeSupported(mime)) {
         this._videoBuffer = this._mediaSource.addSourceBuffer(mime);
-        this._videoBuffer.addEventListener('updateend', () => this._onBufferUpdateEnd());
+        this._videoBuffer.addEventListener('updateend', () => {
+          this._videoAppending = false;
+          this._processVideoQueue();
+        });
       }
     }
 
-    if (this._codecs.audioCodec) {
+    if (this._codecs.audioCodec && !this._audioBuffer) {
       const mime = `audio/mp4; codecs="${this._codecs.audioCodec}"`;
       if (MediaSource.isTypeSupported(mime)) {
         this._audioBuffer = this._mediaSource.addSourceBuffer(mime);
-        this._audioBuffer.addEventListener('updateend', () => this._onBufferUpdateEnd());
+        this._audioBuffer.addEventListener('updateend', () => {
+          this._audioAppending = false;
+          this._processAudioQueue();
+        });
       }
     }
 
-    this._processQueue();
+    this._processVideoQueue();
+    this._processAudioQueue();
   }
 
-  private _onBufferUpdateEnd(): void {
-    this._appending = false;
-    this._processQueue();
-  }
-
-  private _processQueue(): void {
-    if (this._appending || this._queue.length === 0) return;
-
-    const data = this._queue.shift()!;
-    const sb = this._videoBuffer || this._audioBuffer;
-    if (!sb) {
-      this._queue.unshift(data);
-      return;
-    }
-
+  private _processVideoQueue(): void {
+    if (!this._videoBuffer || this._videoAppending || this._videoQueue.length === 0) return;
     try {
-      this._appending = true;
-      sb.appendBuffer(data);
+      this._videoAppending = true;
+      this._videoBuffer.appendBuffer(this._videoQueue.shift()!);
     } catch (err) {
-      this._appending = false;
+      this._videoAppending = false;
+    }
+  }
+
+  private _processAudioQueue(): void {
+    if (!this._audioBuffer || this._audioAppending || this._audioQueue.length === 0) return;
+    try {
+      this._audioAppending = true;
+      this._audioBuffer.appendBuffer(this._audioQueue.shift()!);
+    } catch (err) {
+      this._audioAppending = false;
     }
   }
 
@@ -167,10 +185,12 @@ export class BufferController {
           codecInfo.videoCodec = c;
         } else if (c.startsWith('mp4a') || c.startsWith('ec-3') || c.startsWith('ac-3')) {
           codecInfo.audioCodec = c;
-        } else {
-          if (!codecInfo.videoCodec) codecInfo.videoCodec = c;
         }
       }
+    }
+    // Fallback if none found
+    if (!codecInfo.videoCodec && !codecInfo.audioCodec) {
+        codecInfo.videoCodec = 'avc1.42e01e';
     }
     return codecInfo;
   }

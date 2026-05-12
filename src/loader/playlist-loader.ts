@@ -1,29 +1,29 @@
-interface LoaderStats {
+export interface LoaderStats {
   loaded: number;
   total: number;
   trequest: number;
   tfirst: number;
   tload: number;
   aborted: boolean;
-  loading: boolean;
+  loading?: boolean;
 }
 
-interface LoaderResponse<T> {
+export interface LoaderResponse<T> {
   url: string;
   data: T;
   stats: LoaderStats;
 }
 
-interface LoaderContext {
+export interface LoaderContext {
   url: string;
   headers?: Record<string, string>;
 }
 
-type LoaderOnSuccess<T> = (response: LoaderResponse<T>, stats: LoaderStats, context: LoaderContext) => void;
-type LoaderOnError = (error: { code: number; text: string }, context: LoaderContext) => void;
-type LoaderOnTimeout = (stats: LoaderStats, context: LoaderContext) => void;
-type LoaderOnProgress = (stats: LoaderStats, context: LoaderContext, data: string | ArrayBuffer) => void;
-type LoaderCallbacks<T> = {
+export type LoaderOnSuccess<T> = (response: LoaderResponse<T>, stats: LoaderStats, context: LoaderContext) => void;
+export type LoaderOnError = (error: { code: number; text: string }, context: LoaderContext) => void;
+export type LoaderOnTimeout = (stats: LoaderStats, context: LoaderContext) => void;
+export type LoaderOnProgress = (stats: LoaderStats, context: LoaderContext, data: string | ArrayBuffer) => void;
+export type LoaderCallbacks<T> = {
   onSuccess: LoaderOnSuccess<T>;
   onError: LoaderOnError;
   onTimeout: LoaderOnTimeout;

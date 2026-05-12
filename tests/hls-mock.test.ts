@@ -34,7 +34,7 @@ http://test.com/high.m3u8`;
         );
       },
       stats: { loaded: 0, total: 0, trequest: 0, tfirst: 0, tload: 0, aborted: false },
-      abort: () => {},
+      abort: () => { },
     };
 
     let manifestLoaded = false;
@@ -70,7 +70,7 @@ seg0.ts
         );
       },
       stats: { loaded: 0, total: 0, trequest: 0, tfirst: 0, tload: 0, aborted: false },
-      abort: () => {},
+      abort: () => { },
     };
 
     let levelLoaded = false;
@@ -92,7 +92,7 @@ seg0.ts
         callbacks.onError({ code: 500, text: 'Server Error' }, _ctx);
       },
       stats: { loaded: 0, total: 0, trequest: 0, tfirst: 0, tload: 0, aborted: false },
-      abort: () => {},
+      abort: () => { },
     };
 
     let errorFired = false;
@@ -119,7 +119,7 @@ seg0.ts
         );
       },
       stats: { loaded: 0, total: 0, trequest: 0, tfirst: 0, tload: 0, aborted: false },
-      abort: () => {},
+      abort: () => { },
     };
 
     let timeoutFired = false;
@@ -148,7 +148,7 @@ seg0.ts
         );
       },
       stats: { loaded: 0, total: 0, trequest: 0, tfirst: 0, tload: 0, aborted: false },
-      abort: () => {},
+      abort: () => { },
     };
 
     // Should not throw - parser is lenient

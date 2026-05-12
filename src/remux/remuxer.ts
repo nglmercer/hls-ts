@@ -41,7 +41,7 @@ export class Remuxer {
   private _initSent: boolean = false;
   private _baseDts: number = 0;
 
-  remux(demuxResult: DemuxResult): RemuxResult {
+  remux(demuxResult: DemuxResult, baseDts: number): RemuxResult {
     const result: RemuxResult = {};
 
     if (demuxResult.videoTrack) {
@@ -72,7 +72,7 @@ export class Remuxer {
       const track = this._videoTrack!;
       const mp4Track = this._toMP4Track(track);
       const mp4Samples = videoSamples.map(s => this._toMP4Sample(s));
-      const { moof, mdat } = fragmentBox(mp4Track, mp4Samples, this._baseDts);
+      const { moof, mdat } = fragmentBox(mp4Track, mp4Samples, baseDts);
       result.videoData = concat(moof, mdat);
       result.videoTrack = track;
     }
@@ -81,7 +81,7 @@ export class Remuxer {
       const track = this._audioTrack!;
       const mp4Track = this._toMP4Track(track);
       const mp4Samples = audioSamples.map(s => this._toMP4Sample(s));
-      const { moof, mdat } = fragmentBox(mp4Track, mp4Samples, this._baseDts);
+      const { moof, mdat } = fragmentBox(mp4Track, mp4Samples, baseDts);
       result.audioData = concat(moof, mdat);
       result.audioTrack = track;
     }

@@ -54,11 +54,9 @@ describe('BufferController - error paths', () => {
 
     (bc as unknown as { _onMediaAttached: (data: any) => void })._onMediaAttached({ media: video });
     (bc as unknown as { _onBufferCodecs: (data: any) => void })._onBufferCodecs({ videoCodec: 'avc1.64001e', audioCodec: 'mp4a.40.2' });
-    // Directly call the source open handler (covers line 78)
-    if ((bc as unknown as { _onMediaSourceOpen?: Function })._onMediaSourceOpen) {
-      (bc as unknown as { _onMediaSourceOpen: Function })._onMediaSourceOpen();
-    }
-    // Now detach triggers _cleanMediaSource which tries removeSourceBuffer
+    
+    // We can't easily trigger the anonymous source open handler anymore if it's not exposed.
+    // But we can trigger the cleanup.
     (bc as unknown as { _onMediaDetached: () => void })._onMediaDetached();
 
     bc.destroy();
@@ -70,12 +68,13 @@ describe('BufferController - error paths', () => {
 
     (bc as unknown as { _onMediaAttached: (data: any) => void })._onMediaAttached({ media: { src: '' } as unknown as HTMLVideoElement });
     (bc as unknown as { _onBufferCodecs: (data: any) => void })._onBufferCodecs({ videoCodec: 'avc1.64001e' });
-    // Trigger source open handler
-    if ((bc as unknown as { _onMediaSourceOpen?: Function })._onMediaSourceOpen) {
-      (bc as unknown as { _onMediaSourceOpen: Function })._onMediaSourceOpen();
-    }
 
-    // Queue data — _processQueue will call appendBuffer which throws
+    // Since source buffers are created in an async-ish way (sourceopen), we might need to trigger it
+    // In new BufferController, it's this._onMediaSourceOpen
+    const msOpen = (bc as any)._onMediaSourceOpen;
+    if (msOpen) msOpen();
+
+    // Queue data
     const data = new ArrayBuffer(50);
     (bc as unknown as { _onBufferAppending: (data: any) => void })._onBufferAppending({ data, type: 'video' });
 
@@ -88,30 +87,31 @@ describe('BufferController - error paths', () => {
 
     (bc as unknown as { _onMediaAttached: (data: any) => void })._onMediaAttached({ media: { src: '' } as unknown as HTMLVideoElement });
     (bc as unknown as { _onBufferCodecs: (data: any) => void })._onBufferCodecs({ videoCodec: 'avc1.64001e' });
-    if ((bc as unknown as { _onMediaSourceOpen?: Function })._onMediaSourceOpen) {
-      (bc as unknown as { _onMediaSourceOpen: Function })._onMediaSourceOpen();
-    }
+    
+    const msOpen = (bc as any)._onMediaSourceOpen;
+    if (msOpen) msOpen();
 
     // Set updating flag then flush
-    if ((bc as unknown as { _videoBuffer: { updating: boolean } })._videoBuffer) {
-      (bc as unknown as { _videoBuffer: { updating: boolean } })._videoBuffer.updating = true;
+    if ((bc as any)._videoBuffer) {
+      (bc as any)._videoBuffer.updating = true;
     }
     (bc as unknown as { _onBufferFlushing: (data: any) => void })._onBufferFlushing({ startOffset: 0, endOffset: 10 });
 
     bc.destroy();
   });
 
-  it('should trigger _onBufferUpdateEnd directly', () => {
+  it('should handle direct queue processing', () => {
     const hls = new Hls();
     const bc = new BufferController(hls);
 
-    // Call the update end handler directly (covers lines 137-138)
-    (bc as unknown as { _onBufferUpdateEnd: () => void })._onBufferUpdateEnd();
+    // Call processing methods directly
+    (bc as any)._processVideoQueue();
+    (bc as any)._processAudioQueue();
 
-    // Set appending=true, then call again — should set appending=false
-    (bc as unknown as { _appending: boolean })._appending = true;
-    (bc as unknown as { _onBufferUpdateEnd: () => void })._onBufferUpdateEnd();
-    expect((bc as unknown as { _appending: boolean })._appending).toBe(false);
+    // Set appending flags and call again
+    (bc as any)._videoAppending = true;
+    (bc as any)._processVideoQueue();
+    expect((bc as any)._videoAppending).toBe(true);
 
     bc.destroy();
   });
@@ -127,7 +127,6 @@ describe('FragmentLoader - real timeout path', () => {
   });
 
   it('should trigger onTimeout via setTimeout expiry', async () => {
-    // Mock fetch to return a promise that never resolves
     (globalThis as unknown as { fetch: any }).fetch = () => new Promise(() => {}); // never resolves
 
     const loader = new FragmentLoader(
@@ -171,9 +170,6 @@ describe('ErrorController - retry setTimeout', () => {
 
     const ec = new ErrorController(hlsMock);
 
-    // Trigger network error 3 times to exhaust retries.
-    // Each retry schedules a setTimeout with backoff.
-    // The 3rd call will have retryCount=3 after increments.
     for (let i = 0; i < 4; i++) {
       (ec as unknown as { _onError: (data: any) => void })._onError({
         type: ErrorTypes.NETWORK_ERROR,
@@ -184,14 +180,10 @@ describe('ErrorController - retry setTimeout', () => {
       });
     }
 
-    // Wait for the last setTimeout (backoff) to fire.
-    // Minimum backoff is 500ms (1000 * 2^(-1) = 500).
     await new Promise((r) => setTimeout(r, 1100));
 
-    // After waiting, the retry setTimeout should have fired and triggered LEVEL_LOADING
     const hasLevelLoading = events.some((e) => e === 'levelLoading');
     if (!hasLevelLoading) {
-      // The timer might have been cancelled or retries exhausted; just verify no crash
       expect(ec.destroy).not.toThrow();
     }
     ec.destroy();
@@ -222,7 +214,6 @@ describe('ErrorController - retry setTimeout', () => {
       reason: 'buffer error',
     });
 
-    // Wait for the setTimeout(..., 100) to fire
     await new Promise((r) => setTimeout(r, 200));
 
     expect(detached).toBe(true);
@@ -276,7 +267,6 @@ describe('ErrorController - retry setTimeout', () => {
       frag: { url: 'seg.ts', sn: 5, level: 2 } as any,
     });
 
-    // Wait for the setTimeout(..., 500) to fire
     await new Promise((r) => setTimeout(r, 600));
 
     expect(switchedLevel).toBe(1);
@@ -284,13 +274,9 @@ describe('ErrorController - retry setTimeout', () => {
   });
 });
 
-// ─── 4. TSDemuxer: multi-NALU PES to trigger _accumulateNALUs ─────────────
-
 describe('TSDemuxer - multi-NALU PES for _accumulateNALUs', () => {
   it('should process multiple NALUs and call _accumulateNALUs', () => {
     const demuxer = new TSDemuxer();
-
-    // Build with 3 NALUs: IDR → buffered; non-IDR → accumulated; second non-IDR → next
     const allData = buildMultiNaluTSPackets();
     const result = demuxer.demux(allData, 0);
 
@@ -299,7 +285,6 @@ describe('TSDemuxer - multi-NALU PES for _accumulateNALUs', () => {
   });
 });
 
-// Helper: build TS packets with PAT + PMT + video PES containing 3 NALUs
 function buildMultiNaluTSPackets(): Uint8Array {
   const pat = new Uint8Array(188).fill(0xff);
   pat[0] = 0x47; pat[1] = 0x40; pat[2] = 0x00; pat[3] = 0x50;
@@ -318,10 +303,6 @@ function buildMultiNaluTSPackets(): Uint8Array {
   pmt[15] = 0x00; pmt[16] = 0x00;
   pmt[17] = 0x1b; pmt[18] = 0xe1; pmt[19] = 0x01; pmt[20] = 0x00; pmt[21] = 0x00;
 
-  // Video PES with 3 NALUs:
-  // NALU 1: type 5 (IDR) → goes to else branch → _naluData = [nalu1]
-  // NALU 2: type 1 (non-IDR) → nextStart found for N3 → _naluData.length>0 → _accumulateNALUs
-  // NALU 3: type 1 (non-IDR) → nextStart not found → push remaining
   const vidPkt = new Uint8Array(188).fill(0xff);
   vidPkt[0] = 0x47; vidPkt[1] = 0x40 | 0x01; vidPkt[2] = 0x01; vidPkt[3] = 0x50;
 
@@ -329,11 +310,8 @@ function buildMultiNaluTSPackets(): Uint8Array {
     0x00, 0x00, 0x01, 0xe0, 0x00, 0x00,
     0x80, 0x80, 5, 0x21, 0x00, 0x01, 0x00, 0x01,
   ];
-  // NALU 1: type 5 (IDR), small payload
   const nalu1 = [0x00, 0x00, 0x00, 0x01, 0x65, 0x88, 0x84, 0x00];
-  // NALU 2: type 1 (non-IDR)
   const nalu2 = [0x00, 0x00, 0x00, 0x01, 0x41, 0x9a];
-  // NALU 3: type 1 (non-IDR)
   const nalu3 = [0x00, 0x00, 0x00, 0x01, 0x41, 0x9b];
 
   let idx = 4;

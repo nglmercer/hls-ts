@@ -34,7 +34,7 @@ describe('Remuxer', () => {
       },
     };
 
-    const result = remuxer.remux(demuxResult);
+    const result = remuxer.remux(demuxResult, 0);
     expect(result.initSegment).toBeDefined();
     expect(result.initSegment!.length).toBeGreaterThan(0);
     expect(result.videoData).toBeDefined();
@@ -60,7 +60,7 @@ describe('Remuxer', () => {
       },
     };
 
-    const result = remuxer.remux(demuxResult);
+    const result = remuxer.remux(demuxResult, 0);
     expect(result.initSegment).toBeDefined();
     expect(result.initSegment!.length).toBeGreaterThan(0);
     expect(result.audioData).toBeDefined();
@@ -100,7 +100,7 @@ describe('Remuxer', () => {
       },
     };
 
-    const result = remuxer.remux(demuxResult);
+    const result = remuxer.remux(demuxResult, 0);
     expect(result.initSegment).toBeDefined();
     expect(result.data).toBeDefined();
     expect((result.data!.length)).toBeGreaterThan(0);
@@ -155,7 +155,7 @@ describe('Remuxer', () => {
       },
     };
 
-    const result = remuxer.remux(demuxResult);
+    const result = remuxer.remux(demuxResult, 0);
     expect(result.initSegment).toBeDefined();
     expect(result.videoData).toBeDefined();
   });

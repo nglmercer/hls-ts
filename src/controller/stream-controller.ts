@@ -65,19 +65,14 @@ export class LevelController {
     const level = this._levels.find(l => l.url === data.url);
     if (!level) return;
 
-    level.details = {
-      version: 1,
-      targetduration: data.targetduration,
-      totalduration: data.fragments.reduce((sum: number, f: any) => sum + f.duration, 0),
-      startSN: data.fragments[0]?.sn ?? 0,
-      endSN: data.fragments[data.fragments.length - 1]?.sn ?? 0,
-      fragStart: 0,
-      fragments: data.fragments.map((f: any) => ({
+    let totalDuration = 0;
+    const fragments = data.fragments.map((f: any) => {
+      const frag = {
         url: f.url,
         sn: f.sn,
         level: level.id,
         duration: f.duration,
-        start: 0,
+        start: totalDuration,
         cc: 0,
         byteRangeStart: f.byteRangeStart || 0,
         byteRangeEnd: f.byteRangeEnd || 0,
@@ -85,7 +80,19 @@ export class LevelController {
         initSegment: f.initSegment || data.initSegment || null,
         tagList: f.tagList || [],
         stats: { loaded: 0, total: 0, trequest: 0, tfirst: 0, tload: 0, aborted: false, loading: false },
-      })),
+      };
+      totalDuration += f.duration;
+      return frag;
+    });
+
+    level.details = {
+      version: 1,
+      targetduration: data.targetduration,
+      totalduration: totalDuration,
+      startSN: data.fragments[0]?.sn ?? 0,
+      endSN: data.fragments[data.fragments.length - 1]?.sn ?? 0,
+      fragStart: 0,
+      fragments,
       live: data.live,
       type: data.type,
       updated: Date.now(),
@@ -271,21 +278,21 @@ export class StreamController {
 
     try {
       const demuxResult = this._demuxer.demux(uint8, frag.start);
-      const remuxResult = this._remuxer.remux(demuxResult);
+      const remuxResult = this._remuxer.remux(demuxResult, frag.start * 90000);
 
       if (remuxResult.initSegment) {
-        this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.initSegment, type: 'video' as const });
-        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.initSegment, type: 'video' as const });
+        this.hls.trigger(Events.FRAG_PARSING_INIT_SEGMENT, { frag, tracks: remuxResult });
+        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.initSegment, type: 'video' });
       }
 
       if (remuxResult.videoData) {
-        this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.videoData, type: 'video' as const });
-        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.videoData, type: 'video' as const });
+        this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.videoData, type: 'video' });
+        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.videoData, type: 'video' });
       }
 
       if (remuxResult.audioData) {
-        this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.audioData, type: 'audio' as const });
-        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.audioData, type: 'audio' as const });
+        this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.audioData, type: 'audio' });
+        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.audioData, type: 'audio' });
       }
 
       this.hls.trigger(Events.FRAG_PARSED, { frag });

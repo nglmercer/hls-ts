@@ -65,6 +65,7 @@ const BOX_TYPES: Record<string, number[]> = {
   mdat: [0x6d, 0x64, 0x61, 0x74],
   mvex: [0x6d, 0x76, 0x65, 0x78],
   trex: [0x74, 0x72, 0x65, 0x78],
+  mfhd: [0x6d, 0x66, 0x68, 0x64],
   free: [0x66, 0x72, 0x65, 0x65],
 };
 
@@ -74,7 +75,7 @@ function t(type: string): number[] {
 
 function box(type: number[] | Uint8Array, ...payloads: (Uint8Array)[]): Uint8Array {
   const typeArr = type instanceof Uint8Array ? type : new Uint8Array(type);
-  let size = 8 + typeArr.length - 4;
+  let size = 8;
   for (const p of payloads) size += p.byteLength;
 
   const result = new Uint8Array(size);
@@ -99,8 +100,10 @@ function w32(value: number): Uint8Array {
 function w64(value: number): Uint8Array {
   const arr = new Uint8Array(8);
   const dv = new DataView(arr.buffer);
-  dv.setUint32(0, Math.floor(value / UINT32_MAX));
-  dv.setUint32(4, value >>> 0);
+  const high = Math.floor(value / 0x100000000);
+  const low = value >>> 0;
+  dv.setUint32(0, high);
+  dv.setUint32(4, low);
   return arr;
 }
 
@@ -136,13 +139,11 @@ function zeros(n: number): Uint8Array {
 
 function ftyp(): Uint8Array {
   return box(t('ftyp'),
-    w32(0x69736f6d),
-    w32(0x200),
-    w32(0x69736f6d),
-    w32(0x69736f32),
-    w32(0x61766331),
-    w32(0x68766331),
-    w32(0x6d703461),
+    new Uint8Array([0x69, 0x73, 0x6f, 0x6d]), // isom
+    w32(1), // minor version
+    new Uint8Array([0x69, 0x73, 0x6f, 0x6d]), // isom
+    new Uint8Array([0x61, 0x76, 0x63, 0x31]), // avc1
+    new Uint8Array([0x6d, 0x70, 0x34, 0x32]), // mp42
   );
 }
 
@@ -154,23 +155,35 @@ function mvhd(track: MP4Track): Uint8Array {
     w32(track.duration || 0),
     w32(0x00010000),
     w16(0x0100),
-    zeros(10), zeros(36), zeros(24),
+    zeros(10),
+    new Uint8Array([
+      0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00
+    ]), // identity matrix
+    zeros(24),
+    w32(0xffffffff),
   );
 }
 
 function tkhd(track: MP4Track): Uint8Array {
   return box(t('tkhd'),
-    w8(0), new Uint8Array([0x00, 0x00, 0x07]),
+    w8(0), new Uint8Array([0x00, 0x00, 0x07]), // flags: enabled, in_movie, in_preview
     w32(0),
     w32(0),
-    w32(0), w32(0),
     w32(track.id),
     w32(0),
     w32(track.duration || 0),
     zeros(8),
-    i16(0), i16(0),
-    w16(track.type === 'audio' ? 0x0100 : 0),
-    zeros(2), zeros(36),
+    w16(0), // layer
+    w16(0), // alternate group
+    w16(track.type === 'audio' ? 0x0100 : 0), // volume
+    zeros(2),
+    new Uint8Array([
+      0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00
+    ]), // matrix
     w32((track.width || 0) << 16),
     w32((track.height || 0) << 16),
   );
@@ -182,7 +195,7 @@ function mdhd(track: MP4Track): Uint8Array {
     w32(0), w32(0),
     w32(track.timescale),
     w32(track.duration || 0),
-    w16(0x55c4),
+    w16(0x55c4), // language: und
     w16(0),
   );
 }
@@ -194,13 +207,13 @@ function hdlr(handlerType: string, handlerName: string): Uint8Array {
     w8(0), zeros(3),
     w32(0),
     new Uint8Array(typeBytes),
-    w32(0), w32(0), w32(0),
+    zeros(12),
     new Uint8Array([...nameBytes, 0]),
   );
 }
 
 function vmhd(): Uint8Array {
-  return box(t('vmhd'), w8(0), new Uint8Array([0x00, 0x00, 0x01]), w16(0), zeros(8));
+  return box(t('vmhd'), w8(0), new Uint8Array([0x00, 0x00, 0x01]), w16(0), zeros(6));
 }
 
 function smhd(): Uint8Array {
@@ -209,7 +222,7 @@ function smhd(): Uint8Array {
 
 function dref(): Uint8Array {
   return box(t('dref'), w8(0), zeros(3), w32(1),
-    box(new Uint8Array([0x01, 0x00, 0x00, 0x00]), w8(0), zeros(3)),
+    box(new Uint8Array([0x75, 0x72, 0x6c, 0x20]), w8(0), new Uint8Array([0x00, 0x00, 0x01])), // url  box with self-contained flag
   );
 }
 
@@ -236,10 +249,10 @@ function avc1Box(track: MP4Track): Uint8Array {
   const firstSps = track.sps?.[0];
   const avcCData = [
     0x01,
-    firstSps?.[3] ?? 0x64,
-    firstSps?.[4] ?? 0x00,
-    firstSps?.[5] ?? 0x1e,
-    0xfc | 3,
+    firstSps?.[1] ?? 0x64, // profile
+    firstSps?.[2] ?? 0x00, // constraints
+    firstSps?.[3] ?? 0x1e, // level
+    0xff, // lengthSizeMinusOne = 3 (4 bytes)
     0xe0 | (track.sps?.length || 0),
     ...spsArr,
     track.pps?.length || 0,
@@ -249,14 +262,14 @@ function avc1Box(track: MP4Track): Uint8Array {
   const avcC = box(t('avcC'), new Uint8Array(avcCData));
 
   return box(t('avc1'),
-    zeros(6), w16(0),
-    w16(0), w16(0),
-    w32(0), w32(0), w32(0),
+    zeros(6), w16(1), // data reference index
+    w16(0), w16(0), // version, revision
+    w32(0), w32(0), w32(0), // vendor, temporal quality, spatial quality
     w16(track.width || 0), w16(track.height || 0),
-    w32(0x00480000), w32(0x00480000),
-    w32(0), w16(1),
-    zeros(32),
-    i16(0x0018), i16(0xffff),
+    w32(0x00480000), w32(0x00480000), // resolution
+    w32(0), w16(1), // data size, frame count
+    zeros(32), // compressor name
+    w16(0x0018), w16(0xffff), // depth, color table
     avcC,
   );
 }
@@ -275,52 +288,52 @@ function mp4aBox(track: MP4Track): Uint8Array {
     ]);
   }
 
-  const decoderConfig = [
-    0x11, 0x90,
-    ...Array.from(audioSpecificConfig),
-  ];
-
-  const decoderSpecificInfo = new Uint8Array([
-    0x05, 0x80, 0x80, 0x80, decoderConfig.length,
-    ...decoderConfig,
-    0x06, 0x80, 0x80, 0x80, 0x01, 0x02,
-  ]);
-
   const esds = box(t('esds'), new Uint8Array([
-    0x03, 0x80, 0x80, 0x80, 0x22, 0x00, 0x00,
-    0x04, 0x80, 0x80, 0x80, 0x17,
-    0x40,
+    0x00, 0x00, 0x00, 0x00, // version 0
+    0x03, // ES_DescriptorTag
+    0x80, 0x80, 0x80, // optional bits
+    0x20 + audioSpecificConfig.length, // length
+    0x00, 0x01, // ES_ID
+    0x00, // streamPriority
+    0x04, // DecoderConfigDescrTag
+    0x80, 0x80, 0x80,
+    0x12 + audioSpecificConfig.length, // length
+    0x40, // objectTypeId (Audio ISO/IEC 14496-3)
+    0x15, // streamType (AudioStream)
+    0x00, 0x00, 0x00, // bufferSizeDB
+    0x00, 0x00, 0x00, 0x00, // maxBitrate
+    0x00, 0x00, 0x00, 0x00, // avgBitrate
+    0x05, // AudioSpecificConfigTag
+    0x80, 0x80, 0x80,
+    audioSpecificConfig.length, // length
     ...Array.from(audioSpecificConfig),
-    0x00, 0x00, 0x00, 0x00,
-    ...decoderSpecificInfo,
+    0x06, // SLConfigDescrTag
+    0x80, 0x80, 0x80,
+    0x01, // length
+    0x02, // predefined
   ]));
 
   return box(t('mp4a'),
-    zeros(6), w16(0),
+    zeros(6), w16(1),
     w16(0), w16(0),
     zeros(4),
     w16(channels), w16(16),
     w16(0), w16(0),
-    w32(sampleRate),
+    w32(sampleRate << 16),
     esds,
   );
 }
 
-function stts(track: MP4Track, samples: MP4Sample[]): Uint8Array {
-  if (samples.length === 0) return box(t('stts'), w8(0), zeros(3), w32(0));
-  return box(t('stts'), w8(0), zeros(3), w32(1),
-    w32(samples.length), w32(samples[0].duration),
-  );
+function stts(): Uint8Array {
+  return box(t('stts'), w8(0), zeros(3), w32(0));
 }
 
 function stsc(): Uint8Array {
   return box(t('stsc'), w8(0), zeros(3), w32(0));
 }
 
-function stsz(samples: MP4Sample[]): Uint8Array {
-  return box(t('stsz'), w8(0), zeros(3), w32(0), w32(samples.length),
-    ...samples.map(s => w32(s.size)),
-  );
+function stsz(): Uint8Array {
+  return box(t('stsz'), w8(0), zeros(3), w32(0), w32(0));
 }
 
 function stco(): Uint8Array {
@@ -331,10 +344,9 @@ function trex(track: MP4Track): Uint8Array {
   return box(t('trex'), w8(0), zeros(3), w32(track.id), w32(1), w32(0), w32(0), w32(0));
 }
 
-function tfhd(track: MP4Track, baseDataOffset: number): Uint8Array {
-  return box(t('tfhd'), w8(0), new Uint8Array([0x02, 0x00, 0x00]),
-    w32(track.id), w64(baseDataOffset),
-  );
+function tfhd(track: MP4Track): Uint8Array {
+  // flags: default-base-is-moof (0x020000)
+  return box(t('tfhd'), w8(0), new Uint8Array([0x02, 0x00, 0x00]), w32(track.id));
 }
 
 function tfdt(baseMediaDecodeTime: number): Uint8Array {
@@ -342,25 +354,30 @@ function tfdt(baseMediaDecodeTime: number): Uint8Array {
 }
 
 function trun(samples: MP4Sample[], dataOffset: number): Uint8Array {
+  // flags: data-offset-present (0x001), sample-duration-present (0x100), sample-size-present (0x200), sample-flags-present (0x400), sample-composition-time-offsets-present (0x800)
+  const flags = 0x001 | 0x100 | 0x200 | 0x400 | 0x800;
   const entries: Uint8Array[] = [];
   for (const s of samples) {
-    entries.push(w32(s.size), w32(s.duration),
+    entries.push(
+      w32(s.duration),
+      w32(s.size),
       w32(s.flags.isSync ? 0x02000000 : 0x01010000),
-      w32(s.size), w32(s.cts),
+      i32(s.cts),
     );
   }
-  return box(t('trun'), w8(0), new Uint8Array([0x00, 0x07, 0x05]),
+  return box(t('trun'), w8(0), w24(flags),
     w32(samples.length), i32(dataOffset), ...entries,
   );
 }
 
 export function initSegment(tracks: MP4Track[]): Uint8Array {
+  const ftypBox = ftyp();
   const firstTrack = tracks[0];
   if (!firstTrack) return new Uint8Array(0);
 
   const moovBoxes: Uint8Array[] = [mvhd(firstTrack)];
   for (const track of tracks) {
-    const stblBoxes: Uint8Array[] = [stsd(track), stts(track, []), stsc(), stsz([]), stco()];
+    const stblBoxes: Uint8Array[] = [stsd(track), stts(), stsc(), stsz(), stco()];
     const handlerType = track.type === 'video' ? 'vide' : 'soun';
     const handlerName = track.type === 'video' ? 'VideoHandler' : 'SoundHandler';
     moovBoxes.push(
@@ -379,14 +396,44 @@ export function initSegment(tracks: MP4Track[]): Uint8Array {
     );
   }
   moovBoxes.push(box(t('mvex'), ...tracks.map(t => trex(t))));
-  return box(t('ftyp'), ftyp(), box(t('moov'), ...moovBoxes));
+  const moovBox = box(t('moov'), ...moovBoxes);
+
+  const result = new Uint8Array(ftypBox.length + moovBox.length);
+  result.set(ftypBox);
+  result.set(moovBox, ftypBox.length);
+  return result;
 }
 
 export function fragmentBox(track: MP4Track, samples: MP4Sample[], baseDts: number): { moof: Uint8Array; mdat: Uint8Array } {
-  const dataSize = samples.reduce((sum, s) => sum + s.size, 0);
-  const moofSize = 8 + 8 + 8 + 12 + 12 + 16 + 8 + samples.length * 20;
-  const dataOffset = 8 + moofSize;
+  const trafBoxes: Uint8Array[] = [
+    tfhd(track),
+    tfdt(baseDts),
+  ];
 
+  const dataOffset = 0; // will be patched
+  const trunBox = trun(samples, dataOffset);
+  trafBoxes.push(trunBox);
+
+  const moof = box(t('moof'),
+    box(t('mfhd'), w8(0), zeros(3), w32(baseDts)), // sequence number as baseDts for simplicity
+    box(t('traf'), ...trafBoxes),
+  );
+
+  // Patch trun data_offset
+  const moofSize = moof.byteLength;
+  const actualDataOffset = moofSize + 8;
+  const dv = new DataView(moof.buffer, moof.byteOffset, moof.byteLength);
+  
+  // Find trun box start within moof
+  // moof (8) -> mfhd (16) -> traf (8) -> tfhd (12) -> tfdt (20) -> trun
+  // mfhd: 8 (header) + 8 (payload) = 16
+  // traf header: 8
+  // tfhd: 8 (header) + 4 (id) = 12
+  // tfdt: 8 (header) + 4 (version/flags) + 8 (baseMediaDecodeTime) = 20
+  let trunOffset = 8 + 16 + 8 + 12 + 20; 
+  dv.setInt32(trunOffset + 12, actualDataOffset);
+
+  const dataSize = samples.reduce((sum, s) => sum + s.size, 0);
   const mdatBody = new Uint8Array(dataSize);
   let offset = 0;
   for (const s of samples) {
@@ -394,13 +441,6 @@ export function fragmentBox(track: MP4Track, samples: MP4Sample[], baseDts: numb
     offset += s.size;
   }
   const mdat = box(t('mdat'), mdatBody);
-
-  const trafBoxes: Uint8Array[] = [
-    tfhd(track, moofSize),
-    tfdt(baseDts),
-    trun(samples, dataOffset),
-  ];
-  const moof = box(t('moof'), box(t('traf'), ...trafBoxes));
 
   return { moof, mdat };
 }
