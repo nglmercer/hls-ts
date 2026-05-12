@@ -2,10 +2,10 @@ import { EventEmitter, type HlsEventEmitter } from './EventEmitter';
 import type { EventHandler } from './EventEmitter';
 import { Events } from '../types/events';
 import { defaultConfig, type HlsConfig } from '../types/config';
-import { ErrorTypes } from '../types/errors';
 import type { ManifestData, Level } from '../types/level';
 import { PlaylistLoader } from '../loader/playlist-loader';
 import { parseMasterPlaylist, parseMediaPlaylist } from '../parser/m3u8-parser';
+import { ErrorTypes, ErrorDetails } from '../types/errors';
 import type { HlsError } from '../types/errors';
 import { BufferController } from '../controller/buffer-controller';
 import { LevelController } from '../controller/level-controller';
@@ -284,7 +284,7 @@ export class Hls implements HlsEventEmitter {
           } catch (err) {
             const error: HlsError = {
               type: ErrorTypes.OTHER_ERROR,
-              details: 'manifestParsingError' as any,
+              details: ErrorDetails.MANIFEST_PARSING_ERROR,
               fatal: true,
               reason: `Manifest parsing error: ${(err as Error).message}`,
             };
@@ -294,7 +294,7 @@ export class Hls implements HlsEventEmitter {
         onError: (err) => {
           const error: HlsError = {
             type: ErrorTypes.NETWORK_ERROR,
-            details: 'manifestLoadError' as any,
+            details: ErrorDetails.MANIFEST_LOAD_ERROR,
             fatal: true,
             reason: err.text,
           };
@@ -303,7 +303,7 @@ export class Hls implements HlsEventEmitter {
         onTimeout: () => {
           const error: HlsError = {
             type: ErrorTypes.NETWORK_ERROR,
-            details: 'manifestLoadTimeout' as any,
+            details: ErrorDetails.MANIFEST_LOAD_TIMEOUT,
             fatal: true,
             reason: 'Manifest load timed out',
           };

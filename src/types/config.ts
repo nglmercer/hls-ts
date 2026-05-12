@@ -1,3 +1,5 @@
+import { BackoffTypes, type BackoffType } from './constants';
+
 export interface LoadPolicyConfig {
   maxTimeToFirstByteMs: number;
   maxLoadTimeMs: number;
@@ -9,7 +11,7 @@ export interface RetryConfig {
   maxNumRetry: number;
   retryDelayMs: number;
   maxRetryDelayMs: number;
-  backoff?: 'linear' | 'exponential';
+  backoff?: BackoffType;
 }
 
 export interface BufferConfig {
@@ -61,13 +63,13 @@ export const defaultConfig: HlsConfig = {
     maxTimeToFirstByteMs: 9000,
     maxLoadTimeMs: 100000,
     timeoutRetry: { maxNumRetry: 2, retryDelayMs: 0, maxRetryDelayMs: 0 },
-    errorRetry: { maxNumRetry: 5, retryDelayMs: 3000, maxRetryDelayMs: 15000, backoff: 'linear' },
+    errorRetry: { maxNumRetry: 5, retryDelayMs: 3000, maxRetryDelayMs: 15000, backoff: BackoffTypes.LINEAR },
   },
   playlistLoadPolicy: {
     maxTimeToFirstByteMs: 9000,
     maxLoadTimeMs: 100000,
     timeoutRetry: { maxNumRetry: 2, retryDelayMs: 0, maxRetryDelayMs: 0 },
-    errorRetry: { maxNumRetry: 5, retryDelayMs: 3000, maxRetryDelayMs: 15000, backoff: 'linear' },
+    errorRetry: { maxNumRetry: 5, retryDelayMs: 3000, maxRetryDelayMs: 15000, backoff: BackoffTypes.LINEAR },
   },
   fragLoadPolicy: {
     maxTimeToFirstByteMs: 9000,

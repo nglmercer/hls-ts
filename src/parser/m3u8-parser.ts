@@ -1,3 +1,4 @@
+import { PlaylistTypes, HlsTags } from '../types';
 import type { LevelParsed, MediaPlaylist } from '../types/level';
 
 interface ParseResult {
@@ -41,16 +42,16 @@ export function parseMasterPlaylist(data: string, baseurl: string): ParseResult 
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!.trim();
-    if (line.startsWith('#EXT-X-STREAM-INF:')) {
-      const attrs = parseAttributes(line.substring('#EXT-X-STREAM-INF:'.length));
+    if (line.startsWith(HlsTags.EXT_X_STREAM_INF)) {
+      const attrs = parseAttributes(line.substring(HlsTags.EXT_X_STREAM_INF.length));
       currentBandwidth = parseInt(attrs['BANDWIDTH'] || attrs['AVERAGE-BANDWIDTH'] || '0');
       currentResolution = attrs['RESOLUTION'] || '';
       currentCodecs = attrs['CODECS'] || '';
       currentVideoRange = attrs['VIDEO-RANGE'] || '';
       currentFrameRate = parseFloat(attrs['FRAME-RATE'] || '0');
       currentName = attrs['NAME'] || '';
-    } else if (line.startsWith('#EXT-X-MEDIA:')) {
-      const attrs = parseAttributes(line.substring('#EXT-X-MEDIA:'.length));
+    } else if (line.startsWith(HlsTags.EXT_X_MEDIA)) {
+      const attrs = parseAttributes(line.substring(HlsTags.EXT_X_MEDIA.length));
       const type = attrs['TYPE'];
       const playlist: MediaPlaylist = {
         type: type as MediaPlaylist['type'],
@@ -63,9 +64,9 @@ export function parseMasterPlaylist(data: string, baseurl: string): ParseResult 
         forced: attrs['FORCED'] === 'YES',
         characteristics: attrs['CHARACTERISTICS'] || '',
       };
-      if (type === 'AUDIO') {
+      if (type === PlaylistTypes.AUDIO) {
         audioTracks.push(playlist);
-      } else if (type === 'SUBTITLES') {
+      } else if (type === PlaylistTypes.SUBTITLES) {
         subtitleTracks.push(playlist);
       }
     } else if (line && !line.startsWith('#')) {
@@ -101,7 +102,7 @@ export function parseMediaPlaylist(data: string, baseurl: string): PlaylistParse
   let startSN = 0;
   let endSN = 0;
   let live = true;
-  let type = 'VOD';
+  let type: string = PlaylistTypes.VOD;
   let currentDuration = 0;
   let currentTitle = '';
   let currentByteRange = '';
@@ -116,37 +117,37 @@ export function parseMediaPlaylist(data: string, baseurl: string): PlaylistParse
     const line = lines[i]!.trim();
     if (!line) continue;
 
-    if (line.startsWith('#EXT-X-TARGETDURATION:')) {
-      targetDuration = parseInt(line.substring('#EXT-X-TARGETDURATION:'.length));
-    } else if (line.startsWith('#EXT-X-VERSION:')) {
-      version = parseInt(line.substring('#EXT-X-VERSION:'.length));
-    } else if (line.startsWith('#EXT-X-MEDIA-SEQUENCE:')) {
-      startSN = parseInt(line.substring('#EXT-X-MEDIA-SEQUENCE:'.length));
+    if (line.startsWith(HlsTags.EXT_X_TARGETDURATION)) {
+      targetDuration = parseInt(line.substring(HlsTags.EXT_X_TARGETDURATION.length));
+    } else if (line.startsWith(HlsTags.EXT_X_VERSION)) {
+      version = parseInt(line.substring(HlsTags.EXT_X_VERSION.length));
+    } else if (line.startsWith(HlsTags.EXT_X_MEDIA_SEQUENCE)) {
+      startSN = parseInt(line.substring(HlsTags.EXT_X_MEDIA_SEQUENCE.length));
       sn = startSN;
-    } else if (line === '#EXT-X-ENDLIST') {
+    } else if (line === HlsTags.EXT_X_ENDLIST) {
       isEndlist = true;
-    } else if (line === '#EXT-X-DISCONTINUITY') {
+    } else if (line === HlsTags.EXT_X_DISCONTINUITY) {
       tagList.push(['EXT-X-DISCONTINUITY']);
-    } else if (line.startsWith('#EXT-X-KEY:')) {
-      const attrs = parseAttributes(line.substring('#EXT-X-KEY:'.length));
+    } else if (line.startsWith(HlsTags.EXT_X_KEY)) {
+      const attrs = parseAttributes(line.substring(HlsTags.EXT_X_KEY.length));
       tagList.push(['EXT-X-KEY', attrs['METHOD'] || '', attrs['URI'] || '', attrs['IV'] || '', attrs['KEYFORMAT'] || '']);
-    } else if (line.startsWith('#EXT-X-PLAYLIST-TYPE:')) {
-      type = line.substring('#EXT-X-PLAYLIST-TYPE:'.length);
-    } else if (line.startsWith('#EXT-X-MAP:')) {
-      const attrs = parseAttributes(line.substring('#EXT-X-MAP:'.length));
+    } else if (line.startsWith(HlsTags.EXT_X_PLAYLIST_TYPE)) {
+      type = line.substring(HlsTags.EXT_X_PLAYLIST_TYPE.length).trim();
+    } else if (line.startsWith(HlsTags.EXT_X_MAP)) {
+      const attrs = parseAttributes(line.substring(HlsTags.EXT_X_MAP.length));
       const uri = resolveUrl(attrs['URI'] || '', baseurl);
       const byteRange = attrs['BYTERANGE'] || '';
       const [rangeStart, rangeEnd] = parseByteRange(byteRange);
       initSegment = { url: uri, byteRangeStart: rangeStart, byteRangeEnd: rangeEnd };
-    } else if (line.startsWith('#EXTINF:')) {
-      const infData = line.substring('#EXTINF:'.length);
+    } else if (line.startsWith(HlsTags.EXTINF)) {
+      const infData = line.substring(HlsTags.EXTINF.length);
       const commaIdx = infData.indexOf(',');
       currentDuration = parseFloat(infData.substring(0, commaIdx !== -1 ? commaIdx : infData.length));
       currentTitle = commaIdx !== -1 ? infData.substring(commaIdx + 1) : '';
-    } else if (line.startsWith('#EXT-X-BYTERANGE:')) {
-      currentByteRange = line.substring('#EXT-X-BYTERANGE:'.length);
-    } else if (line.startsWith('#EXT-X-PROGRAM-DATE-TIME:')) {
-      currentProgramDateTime = new Date(line.substring('#EXT-X-PROGRAM-DATE-TIME:'.length)).getTime();
+    } else if (line.startsWith(HlsTags.EXT_X_BYTERANGE)) {
+      currentByteRange = line.substring(HlsTags.EXT_X_BYTERANGE.length);
+    } else if (line.startsWith(HlsTags.EXT_X_PROGRAM_DATE_TIME)) {
+      currentProgramDateTime = new Date(line.substring(HlsTags.EXT_X_PROGRAM_DATE_TIME.length)).getTime();
     } else if (line && !line.startsWith('#')) {
       const [byteStart, byteEnd] = parseByteRange(currentByteRange);
       const url = resolveUrl(line, baseurl);

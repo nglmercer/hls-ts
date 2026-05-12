@@ -1,6 +1,6 @@
 export { Hls } from './src/core/Hls';
 export { EventEmitter } from './src/core/EventEmitter';
-export { Events, ErrorTypes, ErrorDetails, defaultConfig } from './src/types';
+export { Events, ErrorTypes, ErrorDetails, defaultConfig, TrackTypes, SourceBufferModes } from './src/types';
 export type {
   HlsConfig,
   LoadPolicyConfig,
@@ -10,6 +10,8 @@ export type {
   Event,
   ErrorType,
   ErrorDetail,
+  TrackType,
+  SourceBufferMode,
   Level,
   LevelDetails,
   Fragment,

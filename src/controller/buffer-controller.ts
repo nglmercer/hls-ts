@@ -1,6 +1,7 @@
 import { Events } from '../types/events';
 import type { Hls } from '../core/Hls';
 import type { Level } from '../types/level';
+import { TrackTypes, SourceBufferModes, type TrackType, ErrorDetails, ErrorTypes } from '../types';
 
 interface CodecInfo {
   videoCodec?: string;
@@ -72,7 +73,7 @@ export class BufferController {
     }
   };
 
-  _onBufferAppending = (data: { data: ArrayBuffer; type: 'video' | 'audio' }): void => {
+  _onBufferAppending = (data: { data: ArrayBuffer; type: TrackType }): void => {
     this._queue.push(data.data);
     this._processQueue();
   };
@@ -149,7 +150,7 @@ export class BufferController {
     try {
       if (MediaSource.isTypeSupported(mime)) {
         this._sourceBuffer = this._mediaSource.addSourceBuffer(mime);
-        this._sourceBuffer.mode = 'sequence';
+        this._sourceBuffer.mode = SourceBufferModes.SEGMENTS;
         this._sourceBufferReady = true;
         this._sourceBuffer.addEventListener('updateend', () => {
           this._appending = false;
@@ -164,8 +165,8 @@ export class BufferController {
           this._sourceBufferReady = false;
           this._queue = [];
           this.hls.trigger(Events.ERROR, {
-            type: 'mediaError',
-            details: 'bufferAppendError',
+            type: ErrorTypes.MEDIA_ERROR,
+            details: ErrorDetails.BUFFER_APPEND_ERROR,
             fatal: true,
             reason: 'SourceBuffer error during append',
           });

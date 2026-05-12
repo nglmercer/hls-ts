@@ -3,8 +3,7 @@ import type { Hls } from '../core/Hls';
 import type { Level, Fragment, LevelDetails, ManifestData } from '../types/level';
 import { FragmentLoader } from '../loader/fragment-loader';
 import { TransmuxerController } from '../remux/transmuxer-controller';
-import { ErrorTypes } from '../types/errors';
-import type { HlsError } from '../types/errors';
+import { ErrorTypes, ErrorDetails, type HlsError, TrackTypes } from '../types';
 import type { AbrController } from './abr-controller';
 import type { LevelController } from './level-controller';
 
@@ -44,11 +43,15 @@ export class StreamController {
   _onMediaAttached = (data: { media: HTMLMediaElement }): void => {
     this._media = data.media;
     this._media.addEventListener('timeupdate', this._onTimeUpdate);
+    this._media.addEventListener('playing', this._onPlaying);
+    this._media.addEventListener('waiting', this._onPlaying);
   };
 
   _onMediaDetached = (): void => {
     if (this._media) {
       this._media.removeEventListener('timeupdate', this._onTimeUpdate);
+      this._media.removeEventListener('playing', this._onPlaying);
+      this._media.removeEventListener('waiting', this._onPlaying);
     }
     this._media = null;
   };
@@ -159,8 +162,13 @@ export class StreamController {
   };
 
   _onTimeUpdate = (): void => {
-    if (this._paused || this._loading || this._seeking) return;
-    this._loadNextFragment();
+    if (this._paused || this._seeking) return;
+    if (!this._loading) this._loadNextFragment();
+  };
+
+  _onPlaying = (): void => {
+    if (this._paused || this._seeking) return;
+    if (!this._loading) this._loadNextFragment();
   };
 
 
@@ -203,7 +211,7 @@ export class StreamController {
       if (this._currentFrag) {
         const loadedAhead = (this._currentFrag.start + this._currentFrag.duration) - currentTime;
         if (loadedAhead >= maxBuffer) {
-          this._checkBufferTimer = setTimeout(() => this._loadNextFragment(), 1000);
+          this._checkBufferTimer = setTimeout(() => this._loadNextFragment(), 500);
           return;
         }
       }
@@ -215,7 +223,7 @@ export class StreamController {
         const furthestEnd = buffered.end(buffered.length - 1);
         const bufferLen = Math.max(0, furthestEnd - currentTime);
         if (bufferLen >= maxBuffer) {
-          this._checkBufferTimer = setTimeout(() => this._loadNextFragment(), 1000);
+          this._checkBufferTimer = setTimeout(() => this._loadNextFragment(), 500);
           return;
         }
       }
@@ -247,7 +255,7 @@ export class StreamController {
           this._loading = false;
           const error: HlsError = {
             type: ErrorTypes.NETWORK_ERROR,
-            details: 'fragLoadError',
+            details: ErrorDetails.FRAG_LOAD_ERROR,
             fatal: true,
             reason: err.text,
             frag,
@@ -259,7 +267,7 @@ export class StreamController {
           this._loading = false;
           const error: HlsError = {
             type: ErrorTypes.NETWORK_ERROR,
-            details: 'fragLoadTimeout',
+            details: ErrorDetails.FRAG_LOAD_TIMEOUT,
             fatal: false,
             reason: 'Fragment load timed out',
             frag,
@@ -293,13 +301,13 @@ export class StreamController {
       // Append init segment first (contains ftyp + moov with all tracks)
       if (remuxResult.initSegment) {
         this.hls.trigger(Events.FRAG_PARSING_INIT_SEGMENT, { frag, tracks: remuxResult });
-        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.initSegment, type: 'video' });
+        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.initSegment, type: TrackTypes.VIDEO });
       }
 
       // Append combined media data (moof+mdat for each track, concatenated)
       if (remuxResult.data) {
-        this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.data, type: 'video' });
-        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.data, type: 'video' });
+        this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.data, type: TrackTypes.VIDEO });
+        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.data, type: TrackTypes.VIDEO });
       }
 
       this.hls.trigger(Events.FRAG_PARSED, { frag });
@@ -307,7 +315,7 @@ export class StreamController {
     } catch (err) {
       const error: HlsError = {
         type: ErrorTypes.MUX_ERROR,
-        details: 'fragParsingError',
+        details: ErrorDetails.FRAG_PARSING_ERROR,
         fatal: true,
         reason: `Fragment parsing error: ${(err as Error).message}`,
         frag,

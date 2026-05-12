@@ -1,3 +1,4 @@
+import { BackoffTypes, type BackoffType } from '../types';
 import type { Fragment, FragmentStats } from '../types/level';
 
 interface LoaderContext {
@@ -28,7 +29,7 @@ interface RetryConfig {
   maxNumRetry: number;
   retryDelayMs: number;
   maxRetryDelayMs: number;
-  backoff?: 'linear' | 'exponential';
+  backoff?: BackoffType;
 }
 
 export class FragmentLoader {
@@ -43,7 +44,7 @@ export class FragmentLoader {
       maxNumRetry: 2,
       retryDelayMs: 1000,
       maxRetryDelayMs: 10000,
-      backoff: 'exponential',
+      backoff: BackoffTypes.EXPONENTIAL,
     };
     this._timeoutMs = timeoutMs;
     this._stats = this._createStats();
@@ -159,7 +160,7 @@ export class FragmentLoader {
 
   private _getRetryDelay(): number {
     const base = this._retryConfig.retryDelayMs;
-    if (this._retryConfig.backoff === 'exponential') {
+    if (this._retryConfig.backoff === BackoffTypes.EXPONENTIAL) {
       return Math.min(base * Math.pow(2, this._retryCount), this._retryConfig.maxRetryDelayMs);
     }
     return Math.min(base * this._retryCount, this._retryConfig.maxRetryDelayMs);

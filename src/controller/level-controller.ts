@@ -3,9 +3,10 @@ import type { Hls } from '../core/Hls';
 import type { Level, LevelDetails, ManifestData, LevelParsed } from '../types/level';
 import { PlaylistLoader } from '../loader/playlist-loader';
 import { parseMediaPlaylist } from '../parser/m3u8-parser';
-import { ErrorTypes } from '../types/errors';
+import { ErrorTypes, ErrorDetails } from '../types/errors';
 import type { HlsError } from '../types/errors';
 import type { AbrController } from './abr-controller';
+import { TrackTypes, type TrackType } from '../types';
 
 export class LevelController {
   private hls: Hls;
@@ -157,7 +158,7 @@ export class LevelController {
         onError: (err) => {
           this.hls.trigger(Events.ERROR, {
             type: ErrorTypes.NETWORK_ERROR,
-            details: 'levelLoadError',
+            details: ErrorDetails.LEVEL_LOAD_ERROR,
             fatal: false,
             reason: err.text,
           } as HlsError);
@@ -165,7 +166,7 @@ export class LevelController {
         onTimeout: () => {
           this.hls.trigger(Events.ERROR, {
             type: ErrorTypes.NETWORK_ERROR,
-            details: 'levelLoadTimeout',
+            details: ErrorDetails.LEVEL_LOAD_TIMEOUT,
             fatal: false,
             reason: 'Level load timed out',
           } as HlsError);

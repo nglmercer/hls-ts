@@ -1,5 +1,6 @@
 import type { DemuxResult, DemuxedVideoTrack, DemuxedAudioTrack } from './tsdemuxer';
 import { initSegment, fragmentBox, type MP4Track, type MP4Sample } from './mp4-generator';
+import { TrackTypes, type TrackType } from '../types';
 
 export interface RemuxResult {
   initSegment?: Uint8Array;
@@ -12,7 +13,7 @@ export interface RemuxResult {
 
 export interface RemuxedTrack {
   id: number;
-  type: 'video' | 'audio';
+  type: TrackType;
   timescale: number;
   duration: number;
   width?: number;
@@ -167,7 +168,7 @@ export class Remuxer {
   private _remuxVideo(track: DemuxedVideoTrack): void {
     this._videoTrack = {
       id: track.id,
-      type: 'video',
+      type: TrackTypes.VIDEO,
       timescale: track.timescale,
       duration: track.duration,
       width: track.width,
@@ -194,7 +195,7 @@ export class Remuxer {
   private _remuxAudio(track: DemuxedAudioTrack): void {
     this._audioTrack = {
       id: track.id,
-      type: 'audio',
+      type: TrackTypes.AUDIO,
       timescale: track.timescale,
       duration: track.duration,
       codec: track.codec,
