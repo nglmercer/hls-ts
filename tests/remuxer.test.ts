@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import { Remuxer } from '../src/remux/remuxer';
 import type { DemuxResult } from '../src/remux/tsdemuxer';
+import { TrackTypes } from '../src/types';
 
 describe('Remuxer', () => {
   it('should create and reset', () => {
@@ -19,7 +20,7 @@ describe('Remuxer', () => {
     const remuxer = new Remuxer();
     const demuxResult: DemuxResult = {
       videoTrack: {
-        type: 'video',
+        type: TrackTypes.VIDEO,
         id: 1,
         timescale: 90000,
         duration: 0,
@@ -46,7 +47,7 @@ describe('Remuxer', () => {
     const remuxer = new Remuxer();
     const demuxResult: DemuxResult = {
       audioTrack: {
-        type: 'audio',
+        type: TrackTypes.AUDIO,
         id: 2,
         timescale: 44100,
         duration: 0,
@@ -72,7 +73,7 @@ describe('Remuxer', () => {
     const remuxer = new Remuxer();
     const demuxResult: DemuxResult = {
       videoTrack: {
-        type: 'video',
+        type: TrackTypes.VIDEO,
         id: 1,
         timescale: 90000,
         duration: 0,
@@ -86,7 +87,7 @@ describe('Remuxer', () => {
         ],
       },
       audioTrack: {
-        type: 'audio',
+        type: TrackTypes.AUDIO,
         id: 2,
         timescale: 44100,
         duration: 0,
@@ -112,7 +113,7 @@ describe('Remuxer', () => {
     const remuxer = new Remuxer();
     const demuxResult: DemuxResult = {
       videoTrack: {
-        type: 'video',
+        type: TrackTypes.VIDEO,
         id: 1,
         timescale: 90000,
         duration: 0,
@@ -138,7 +139,7 @@ describe('Remuxer', () => {
     const remuxer = new Remuxer();
     const demuxResult: DemuxResult = {
       videoTrack: {
-        type: 'video',
+        type: TrackTypes.VIDEO,
         id: 1,
         timescale: 90000,
         duration: 0,

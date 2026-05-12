@@ -1,4 +1,5 @@
 import { type DemuxedVideoSample, type DemuxedAudioSample, type DemuxResult, type IDemuxer, type DemuxedAudioTrack } from './types';
+import { TrackTypes } from '../types';
 
 const BITRATES: Record<number, Record<number, Record<number, number>>> = {
   // MPEG 1
@@ -137,7 +138,7 @@ export class MP3Demuxer implements IDemuxer {
   private _initAudioTrack(): DemuxedAudioTrack {
     if (!this._audioTrack) {
       this._audioTrack = {
-        type: 'audio',
+        type: TrackTypes.AUDIO,
         id: 2,
         timescale: 90000,
         duration: 0,

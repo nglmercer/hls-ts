@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'bun:test';
 import { initSegment, fragmentBox, type MP4Track, type MP4Sample } from '../src/remux/mp4-generator';
+import { TrackTypes } from '../src/types';
 
 describe('MP4 Generator', () => {
   const videoTrack: MP4Track = {
     id: 1,
-    type: 'video',
+    type: TrackTypes.VIDEO,
     timescale: 90000,
     duration: 0,
     width: 640,
@@ -16,7 +17,7 @@ describe('MP4 Generator', () => {
 
   const audioTrack: MP4Track = {
     id: 2,
-    type: 'audio',
+    type: TrackTypes.AUDIO,
     timescale: 44100,
     duration: 0,
     codec: 'mp4a.40.2',

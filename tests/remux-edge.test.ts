@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { TSDemuxer } from '../src/remux/tsdemuxer';
+import { TrackTypes } from '../src/types';
 import { type DemuxedVideoTrack, type DemuxedAudioTrack } from '../src/remux/types';
 import { initSegment, fragmentBox, type MP4Track, type MP4Sample } from '../src/remux/mp4-generator';
 import { Remuxer } from '../src/remux/remuxer';
@@ -173,7 +174,7 @@ describe('Remuxer - edge cases', () => {
     const remuxer = new Remuxer();
     const result = remuxer.remux({
       audioTrack: {
-        type: 'audio', id: 2, timescale: 44100, duration: 0,
+        type: TrackTypes.AUDIO, id: 2, timescale: 44100, duration: 0,
         codec: 'mp4a.40.2', channelCount: 2, sampleRate: 44100,
         config: new Uint8Array(2),
         samples: [{ size: 8, duration: 1024, dts: 0, pts: 0, data: new Uint8Array(8) }],

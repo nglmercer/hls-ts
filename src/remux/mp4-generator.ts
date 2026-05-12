@@ -1,8 +1,10 @@
+import { TrackTypes, type TrackType } from '../types';
+
 const UINT32_MAX = Math.pow(2, 32) - 1;
 
 export interface MP4Track {
   id: number;
-  type: 'video' | 'audio';
+  type: TrackType;
   timescale: number;
   duration: number;
   width?: number;
@@ -181,7 +183,7 @@ function tkhd(track: MP4Track): Uint8Array {
     zeros(8),
     w16(0), // layer
     w16(0), // alternate group
-    w16(track.type === 'audio' ? 0x0100 : 0), // volume
+    w16(track.type === TrackTypes.AUDIO ? 0x0100 : 0), // volume
     zeros(2),
     new Uint8Array([
       0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -232,7 +234,7 @@ function dref(): Uint8Array {
 
 function stsd(track: MP4Track): Uint8Array {
   const entries: Uint8Array[] = [];
-  if (track.type === 'video') {
+  if (track.type === TrackTypes.VIDEO) {
     const isHEVC = track.codec.startsWith('hev1') || track.codec.startsWith('hvc1');
     entries.push(isHEVC ? hvc1Box(track) : avc1Box(track));
   } else {
@@ -436,8 +438,8 @@ export function initSegment(tracks: MP4Track[]): Uint8Array {
   const moovBoxes: Uint8Array[] = [mvhd(firstTrack)];
   for (const track of tracks) {
     const stblBoxes: Uint8Array[] = [stsd(track), stts(), stsc(), stsz(), stco()];
-    const handlerType = track.type === 'video' ? 'vide' : 'soun';
-    const handlerName = track.type === 'video' ? 'VideoHandler' : 'SoundHandler';
+    const handlerType = track.type === TrackTypes.VIDEO ? 'vide' : 'soun';
+    const handlerName = track.type === TrackTypes.VIDEO ? 'VideoHandler' : 'SoundHandler';
     moovBoxes.push(
       box(t('trak'),
         tkhd(track),
@@ -445,7 +447,7 @@ export function initSegment(tracks: MP4Track[]): Uint8Array {
           mdhd(track),
           hdlr(handlerType, handlerName),
           box(t('minf'),
-            track.type === 'video' ? vmhd() : smhd(),
+            track.type === TrackTypes.VIDEO ? vmhd() : smhd(),
             box(t('dinf'), dref()),
             box(t('stbl'), ...stblBoxes),
           ),

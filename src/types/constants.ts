@@ -26,6 +26,7 @@ export const PlaylistTypes = {
   VIDEO: 'VIDEO',
   VOD: 'VOD',
   EVENT: 'EVENT',
+  CLOSED_CAPTIONS: 'CLOSED-CAPTIONS',
 } as const;
 
 export type PlaylistType = (typeof PlaylistTypes)[keyof typeof PlaylistTypes];

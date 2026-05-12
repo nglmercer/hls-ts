@@ -3,8 +3,9 @@ import { Hls } from '../src/core/Hls';
 import { BufferController } from '../src/controller/buffer-controller';
 import { FragmentLoader } from '../src/loader/fragment-loader';
 import { ErrorController } from '../src/controller/error-controller';
-import { ErrorTypes } from '../src/types/errors';
+import { ErrorTypes, ErrorDetails } from '../src/types/errors';
 import { TSDemuxer } from '../src/remux/tsdemuxer';
+import { TrackTypes } from '../src/types';
 
 // ─── 1. BufferController: test the try-catch error paths ───────────────────
 
@@ -66,7 +67,7 @@ describe('BufferController - error paths', () => {
     (bc as unknown as { _onBufferCodecs: (data: any) => void })._onBufferCodecs({ videoCodec: 'avc1.64001e' });
 
     const data = new ArrayBuffer(50);
-    (bc as unknown as { _onBufferAppending: (data: any) => void })._onBufferAppending({ data, type: 'video' });
+    (bc as unknown as { _onBufferAppending: (data: any) => void })._onBufferAppending({ data, type: TrackTypes.VIDEO });
 
     bc.destroy();
   });
@@ -153,7 +154,7 @@ describe('ErrorController - retry setTimeout', () => {
     for (let i = 0; i < 4; i++) {
       (ec as unknown as { _onError: (data: any) => void })._onError({
         type: ErrorTypes.NETWORK_ERROR,
-        details: 'fragLoadError',
+        details: ErrorDetails.FRAG_LOAD_ERROR,
         fatal: true,
         reason: `Attempt ${i + 1}`,
         frag: { url: `seg${i}.ts`, sn: i, level: 0 } as any,
@@ -164,7 +165,7 @@ describe('ErrorController - retry setTimeout', () => {
 
     const hasLevelLoading = events.some((e) => e === 'levelLoading');
     if (!hasLevelLoading) {
-      expect(ec.destroy).not.toThrow();
+      expect(() => ec.destroy()).not.toThrow();
     }
     ec.destroy();
   });
@@ -189,7 +190,7 @@ describe('ErrorController - retry setTimeout', () => {
     const ec = new ErrorController(hlsMock);
     (ec as any)._onError({
       type: ErrorTypes.MEDIA_ERROR,
-      details: 'bufferAppendError',
+      details: ErrorDetails.BUFFER_APPEND_ERROR,
       fatal: true,
       reason: 'buffer error',
     });
@@ -241,7 +242,7 @@ describe('ErrorController - retry setTimeout', () => {
     const ec = new ErrorController(hlsMock as any);
     (ec as unknown as { _onError: (data: any) => void })._onError({
       type: ErrorTypes.MUX_ERROR,
-      details: 'fragParsingError',
+      details: ErrorDetails.FRAG_PARSING_ERROR,
       fatal: true,
       reason: 'parse error',
       frag: { url: 'seg.ts', sn: 5, level: 2 } as any,

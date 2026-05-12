@@ -1,5 +1,6 @@
 import { AacStream } from './aac-stream';
 import { type DemuxedVideoSample, type DemuxedAudioSample, type DemuxResult, type IDemuxer, type DemuxedAudioTrack } from './types';
+import { TrackTypes } from '../types';
 
 export class AACDemuxer implements IDemuxer {
   private _aacStream: AacStream;
@@ -29,7 +30,7 @@ export class AACDemuxer implements IDemuxer {
   private _initAudioTrack(): DemuxedAudioTrack {
     if (!this._audioTrack) {
       this._audioTrack = {
-        type: 'audio',
+        type: TrackTypes.AUDIO,
         id: 2,
         timescale: 90000,
         duration: 0,

@@ -18,7 +18,7 @@ interface PlaylistParseResult {
     programDateTime: number;
     tagList: string[][];
   }>;
-  targetDuration: number;
+  targetduration: number;
   version: number;
   startSN: number;
   endSN: number;
@@ -97,7 +97,7 @@ export function parseMasterPlaylist(data: string, baseurl: string): ParseResult 
 export function parseMediaPlaylist(data: string, baseurl: string): PlaylistParseResult {
   const fragments: PlaylistParseResult['fragments'] = [];
   const lines = data.split('\n');
-  let targetDuration = 0;
+  let targetduration = 0;
   let version = 1;
   let startSN = 0;
   let endSN = 0;
@@ -118,7 +118,7 @@ export function parseMediaPlaylist(data: string, baseurl: string): PlaylistParse
     if (!line) continue;
 
     if (line.startsWith(HlsTags.EXT_X_TARGETDURATION)) {
-      targetDuration = parseInt(line.substring(HlsTags.EXT_X_TARGETDURATION.length));
+      targetduration = parseInt(line.substring(HlsTags.EXT_X_TARGETDURATION.length));
     } else if (line.startsWith(HlsTags.EXT_X_VERSION)) {
       version = parseInt(line.substring(HlsTags.EXT_X_VERSION.length));
     } else if (line.startsWith(HlsTags.EXT_X_MEDIA_SEQUENCE)) {
@@ -174,7 +174,7 @@ export function parseMediaPlaylist(data: string, baseurl: string): PlaylistParse
   endSN = sn - 1;
   live = !isEndlist;
 
-  return { fragments, targetDuration, version, startSN, endSN, live, type, initSegment };
+  return { fragments, targetduration, version, startSN, endSN, live, type, initSegment };
 }
 
 function parseAttributes(data: string): Record<string, string> {

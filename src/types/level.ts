@@ -1,3 +1,5 @@
+import type { PlaylistType } from './constants';
+
 export interface Level {
   id: number;
   url: string;
@@ -65,7 +67,7 @@ export interface LevelParsed {
 }
 
 export interface MediaPlaylist {
-  type: 'AUDIO' | 'SUBTITLES' | 'CLOSED-CAPTIONS';
+  type: PlaylistType;
   groupId: string;
   name: string;
   url: string;

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { TSDemuxer } from '../src/remux/tsdemuxer';
+import { TrackTypes } from '../src/types';
 
 function createTSPacket(
   pid: number,
@@ -158,7 +159,7 @@ describe('TSDemuxer', () => {
     const result = demuxer.demux(tsData, 0);
 
     expect(result.videoTrack).toBeDefined();
-    expect(result.videoTrack!.type).toBe('video');
+    expect(result.videoTrack!.type).toBe(TrackTypes.VIDEO);
     expect(result.videoTrack!.samples.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -193,7 +194,7 @@ describe('TSDemuxer', () => {
 
     const result = demuxer.demux(tsData, 0);
     expect(result.audioTrack).toBeDefined();
-    expect(result.audioTrack!.type).toBe('audio');
+    expect(result.audioTrack!.type).toBe(TrackTypes.AUDIO);
   });
 
   it('should handle empty data gracefully', () => {

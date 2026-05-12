@@ -25,6 +25,7 @@ describe('MP3Demuxer', () => {
     const data = new Uint8Array(500).fill(0);
     data[0] = 0xff;
     data[1] = 0xfb; // sync + layer III
+    data[2] = 0x90; // bitrate index 9, samplerate index 0
     const result = demuxer.demux(data, 0);
     expect(result.audioTrack).toBeDefined();
     expect(result.audioTrack?.samples.length).toBeGreaterThan(0);

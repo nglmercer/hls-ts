@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from 'bun:test';
 import { Hls } from '../src/core/Hls';
 import { BufferController } from '../src/controller/buffer-controller';
+import { TrackTypes } from '../src/types';
 
 class MockSourceBuffer {
   updating: boolean = false;
@@ -89,7 +90,7 @@ describe('BufferController', () => {
     const hls = new Hls();
     const bc = new BufferController(hls);
     const data = new ArrayBuffer(100);
-    (bc as unknown as { _onBufferAppending: (data: any) => void })._onBufferAppending({ data, type: 'video' });
+    (bc as unknown as { _onBufferAppending: (data: any) => void })._onBufferAppending({ data, type: TrackTypes.VIDEO });
     bc.destroy();
   });
 

@@ -4,6 +4,7 @@ import { Hls } from '../src/core/Hls';
 import { defaultConfig } from '../src/types/config';
 import { parseMasterPlaylist, parseMediaPlaylist } from '../src/parser/m3u8-parser';
 import { EWMA } from '../src/controller/abr-controller';
+import { TrackTypes } from '../src/types';
 
 describe('EventEmitter', () => {
   it('should emit and listen to events', () => {

@@ -1,5 +1,7 @@
+import { TrackTypes, type TrackType } from '../types';
+
 export interface DemuxedVideoTrack {
-  type: 'video';
+  type: TrackType;
   id: number;
   timescale: number;
   duration: number;
@@ -13,7 +15,7 @@ export interface DemuxedVideoTrack {
 }
 
 export interface DemuxedAudioTrack {
-  type: 'audio';
+  type: TrackType;
   id: number;
   timescale: number;
   duration: number;

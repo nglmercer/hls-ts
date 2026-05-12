@@ -6,6 +6,7 @@ import {
   type DemuxResult,
   type IDemuxer,
 } from './types';
+import { TrackTypes, type TrackType } from '../types';
 import { AacStream } from './aac-stream';
 import { AvcStream } from './avc-stream';
 import { HevcStream } from './hevc-stream';
@@ -23,7 +24,7 @@ export class TSDemuxer implements IDemuxer {
   private _avcStream: AvcStream;
   private _hevcStream: HevcStream;
   private _pmtPid: number = -1;
-  private _pids: Map<number, { type: 'video' | 'audio'; streamType: number }> = new Map();
+  private _pids: Map<number, { type: TrackType; streamType: number }> = new Map();
   private _pesData: Map<number, Uint8Array[]> = new Map();
   private _continuityCounters: Map<number, number> = new Map();
   private _discontinuity: boolean = false;
@@ -68,7 +69,7 @@ export class TSDemuxer implements IDemuxer {
       this._parsePacket(packet);
       offset += TS_PACKET_SIZE;
     }
-    //this._flush();
+    this._flush();
 
     return {
       videoTrack: this._videoTrack,
@@ -181,16 +182,16 @@ export class TSDemuxer implements IDemuxer {
       const esInfoLength = ((payload[offset + 3] & 0x0f) << 8) | payload[offset + 4];
 
       if (streamType === 0x1b || streamType === 0x24) {
-        this._pids.set(elementaryPid, { type: 'video', streamType });
+        this._pids.set(elementaryPid, { type: TrackTypes.VIDEO, streamType });
       } else if (streamType === 0x0f || streamType === 0x11 || streamType === 0x03 || streamType === 0x04) {
-        this._pids.set(elementaryPid, { type: 'audio', streamType });
+        this._pids.set(elementaryPid, { type: TrackTypes.AUDIO, streamType });
       }
 
       offset += 5 + esInfoLength; // Skip past ES_info descriptors
     }
   }
 
-  private _collectPES(payload: Uint8Array, pid: number, type: 'video' | 'audio', unitStart: boolean): void {
+  private _collectPES(payload: Uint8Array, pid: number, type: TrackType, unitStart: boolean): void {
     if (unitStart) {
       if (this._pesData.has(pid)) {
         this._processPES(pid);
@@ -240,13 +241,13 @@ export class TSDemuxer implements IDemuxer {
     if (pesHeaderLength >= data.length) return;
     const esData = data.subarray(pesHeaderLength);
 
-    if (pidInfo.type === 'video') {
+    if (pidInfo.type === TrackTypes.VIDEO) {
       if (pidInfo.streamType === 0x24) {
         this._hevcStream.parse(esData, pts, dts, this);
       } else {
         this._avcStream.parse(esData, pts, dts, this);
       }
-    } else if (pidInfo.type === 'audio') {
+    } else if (pidInfo.type === TrackTypes.AUDIO) {
       this._aacStream.parse(esData, pts, dts, this);
     }
   }
@@ -300,8 +301,9 @@ export class TSDemuxer implements IDemuxer {
 
   private _initVideoTrack(): DemuxedVideoTrack {
     if (!this._videoTrack) {
+
       this._videoTrack = {
-        type: 'video',
+        type: TrackTypes.VIDEO,
         id: 1,
         timescale: 90000,
         duration: 0,
@@ -318,8 +320,9 @@ export class TSDemuxer implements IDemuxer {
 
   private _initAudioTrack(): DemuxedAudioTrack {
     if (!this._audioTrack) {
+
       this._audioTrack = {
-        type: 'audio',
+        type: TrackTypes.AUDIO,
         id: 2,
         timescale: 90000,
         duration: 0,
