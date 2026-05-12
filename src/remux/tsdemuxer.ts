@@ -8,6 +8,7 @@ import {
 } from './types';
 import { AacStream } from './aac-stream';
 import { AvcStream } from './avc-stream';
+import { HevcStream } from './hevc-stream';
 
 export * from './types';
 
@@ -20,13 +21,31 @@ export class TSDemuxer implements IDemuxer {
   private _audioTrack?: DemuxedAudioTrack;
   private _aacStream: AacStream;
   private _avcStream: AvcStream;
+  private _hevcStream: HevcStream;
   private _pmtPid: number = -1;
-  private _pids: Map<number, 'video' | 'audio'> = new Map();
+  private _pids: Map<number, { type: 'video' | 'audio'; streamType: number }> = new Map();
   private _pesData: Map<number, Uint8Array[]> = new Map();
+  private _continuityCounters: Map<number, number> = new Map();
+  private _discontinuity: boolean = false;
+  private _ptsRollover: number = 0;
+  private _lastPts: number = 0;
 
   constructor() {
     this._aacStream = new AacStream();
     this._avcStream = new AvcStream();
+    this._hevcStream = new HevcStream();
+  }
+
+  set discontinuity(value: boolean) {
+    this._discontinuity = value;
+    if (value) {
+      this._flushPES();
+      this._continuityCounters.clear();
+      this._ptsRollover = 0;
+      this._lastPts = 0;
+      this._avcStream.flush(this);
+      this._aacStream.flush(this);
+    }
   }
 
   demux(data: Uint8Array, timeOffset: number): DemuxResult {
@@ -66,10 +85,30 @@ export class TSDemuxer implements IDemuxer {
     const payloadUnitStart = (packet[1] & 0x40) !== 0;
     const hasAdaptation = (packet[3] & 0x20) !== 0;
     const hasPayload = (packet[3] & 0x10) !== 0;
+    const continuityCounter = packet[3] & 0x0f;
+
+    // Check continuity counter for jumps (skip PAT and null packets)
+    if (pid !== PID_PAT && pid !== 0x1fff) {
+      const expectedCC = this._continuityCounters.get(pid);
+      if (expectedCC !== undefined) {
+        const expected = (expectedCC + 1) & 0x0f;
+        if (continuityCounter !== expected && continuityCounter !== expectedCC) {
+          this._flushPESForPid(pid);
+        }
+      }
+      this._continuityCounters.set(pid, continuityCounter);
+    }
+
     let payloadOffset = 4;
 
     if (hasAdaptation) {
       const adaptationLength = packet[4];
+      if (adaptationLength > 0 && payloadOffset + 1 < TS_PACKET_SIZE) {
+        const discontinuityIndicator = (packet[payloadOffset + 1] & 0x80) !== 0;
+        if (discontinuityIndicator && pid !== PID_PAT) {
+          this._flushPESForPid(pid);
+        }
+      }
       payloadOffset += 1 + adaptationLength;
     }
 
@@ -87,9 +126,9 @@ export class TSDemuxer implements IDemuxer {
       }
     }
 
-    const streamType = this._pids.get(pid);
-    if (streamType) {
-      this._collectPES(payload, pid, streamType, payloadUnitStart);
+    const streamInfo = this._pids.get(pid);
+    if (streamInfo) {
+      this._collectPES(payload, pid, streamInfo.type, payloadUnitStart);
     }
   }
 
@@ -143,11 +182,9 @@ export class TSDemuxer implements IDemuxer {
       const esInfoLength = ((payload[offset + 3] & 0x0f) << 8) | payload[offset + 4];
 
       if (streamType === 0x1b || streamType === 0x24) {
-        // H.264 or H.265
-        this._pids.set(elementaryPid, 'video');
+        this._pids.set(elementaryPid, { type: 'video', streamType });
       } else if (streamType === 0x0f || streamType === 0x11 || streamType === 0x03 || streamType === 0x04) {
-        // AAC, AAC-LATM, MPEG1 Audio, MPEG2 Audio
-        this._pids.set(elementaryPid, 'audio');
+        this._pids.set(elementaryPid, { type: 'audio', streamType });
       }
 
       offset += 5 + esInfoLength; // Skip past ES_info descriptors
@@ -156,9 +193,8 @@ export class TSDemuxer implements IDemuxer {
 
   private _collectPES(payload: Uint8Array, pid: number, type: 'video' | 'audio', unitStart: boolean): void {
     if (unitStart) {
-      // Process any previously accumulated PES data for this PID
       if (this._pesData.has(pid)) {
-        this._processPES(pid, type);
+        this._processPES(pid);
       }
       this._pesData.set(pid, [payload]);
     } else {
@@ -169,11 +205,13 @@ export class TSDemuxer implements IDemuxer {
     }
   }
 
-  private _processPES(pid: number, type: 'video' | 'audio'): void {
+  private _processPES(pid: number): void {
+    const pidInfo = this._pids.get(pid);
+    if (!pidInfo) return;
+
     const parts = this._pesData.get(pid);
     if (!parts || parts.length === 0) return;
 
-    // Concatenate all parts
     const totalLength = parts.reduce((sum, p) => sum + p.length, 0);
     const data = new Uint8Array(totalLength);
     let offset = 0;
@@ -182,11 +220,9 @@ export class TSDemuxer implements IDemuxer {
       offset += part.length;
     }
 
-    // Verify PES start code
     if (data.length < 9) return;
     if (data[0] !== 0x00 || data[1] !== 0x00 || data[2] !== 0x01) return;
 
-    // PES header
     const ptsDtsFlag = (data[7] >> 6) & 0x03;
     const pesHeaderDataLength = data[8];
     const pesHeaderLength = 9 + pesHeaderDataLength;
@@ -194,9 +230,9 @@ export class TSDemuxer implements IDemuxer {
     let dts = 0;
 
     if (ptsDtsFlag >= 2 && data.length >= 14) {
-      pts = this._parsePTS(data, 9);
+      pts = this._normalizePTS(this._parsePTS(data, 9));
       if (ptsDtsFlag === 3 && data.length >= 19) {
-        dts = this._parsePTS(data, 14);
+        dts = this._normalizePTS(this._parsePTS(data, 14));
       } else {
         dts = pts;
       }
@@ -205,32 +241,61 @@ export class TSDemuxer implements IDemuxer {
     if (pesHeaderLength >= data.length) return;
     const esData = data.subarray(pesHeaderLength);
 
-    if (type === 'video') {
-      this._avcStream.parse(esData, pts, dts, this);
-    } else if (type === 'audio') {
+    if (pidInfo.type === 'video') {
+      if (pidInfo.streamType === 0x24) {
+        this._hevcStream.parse(esData, pts, dts, this);
+      } else {
+        this._avcStream.parse(esData, pts, dts, this);
+      }
+    } else if (pidInfo.type === 'audio') {
       this._aacStream.parse(esData, pts, dts, this);
     }
   }
 
   private _parsePTS(data: Uint8Array, offset: number): number {
-    // PTS is 33 bits spread across 5 bytes
     return (
-      ((data[offset] & 0x0e) * 536870912) + // 2^29
-      ((data[offset + 1] & 0xff) * 4194304) + // 2^22
-      ((data[offset + 2] & 0xfe) * 16384) + // 2^14
-      ((data[offset + 3] & 0xff) * 128) + // 2^7
+      ((data[offset] & 0x0e) * 536870912) +
+      ((data[offset + 1] & 0xff) * 4194304) +
+      ((data[offset + 2] & 0xfe) * 16384) +
+      ((data[offset + 3] & 0xff) * 128) +
       ((data[offset + 4] & 0xfe) >> 1)
     );
   }
 
-  private _flush(): void {
-    for (const [pid, type] of this._pids) {
+  private _normalizePTS(rawPts: number): number {
+    const PTS_MAX = 0x1FFFFFFFF;
+    if (this._lastPts === 0) {
+      this._lastPts = rawPts;
+      return rawPts;
+    }
+    // Detect 33-bit overflow: if new PTS is much smaller than last, we've wrapped
+    if (rawPts < this._lastPts - (PTS_MAX >> 1)) {
+      this._ptsRollover += PTS_MAX + 1;
+    }
+    this._lastPts = rawPts;
+    return rawPts + this._ptsRollover;
+  }
+
+  private _flushPESForPid(pid: number): void {
+    if (this._pids.has(pid) && this._pesData.has(pid)) {
+      this._processPES(pid);
+      this._pesData.delete(pid);
+    }
+  }
+
+  private _flushPES(): void {
+    for (const pid of this._pids.keys()) {
       if (this._pesData.has(pid)) {
-        this._processPES(pid, type);
+        this._processPES(pid);
         this._pesData.delete(pid);
       }
     }
+  }
+
+  private _flush(): void {
+    this._flushPES();
     this._avcStream.flush(this);
+    this._hevcStream.flush(this);
     this._aacStream.flush(this);
   }
 
@@ -309,6 +374,10 @@ export class TSDemuxer implements IDemuxer {
 
   setVideoPPS(pps: Uint8Array): void {
     this._initVideoTrack().pps = [pps];
+  }
+
+  setVideoVPS(vps: Uint8Array): void {
+    this._initVideoTrack().vps = [vps];
   }
 
   setAudioConfig(config: Uint8Array, sampleRate: number, channelCount: number): void {

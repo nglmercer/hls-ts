@@ -9,6 +9,7 @@ export interface MP4Track {
   height?: number;
   sps?: Uint8Array[];
   pps?: Uint8Array[];
+  vps?: Uint8Array[];
   audioConfig?: Uint8Array;
   channelCount?: number;
   sampleRate?: number;
@@ -34,6 +35,9 @@ const BOX_TYPES: Record<string, number[]> = {
   ftyp: [0x66, 0x74, 0x79, 0x70],
   avc1: [0x61, 0x76, 0x63, 0x31],
   avcC: [0x61, 0x76, 0x63, 0x43],
+  hev1: [0x68, 0x65, 0x76, 0x31],
+  hvc1: [0x68, 0x76, 0x63, 0x31],
+  hvcC: [0x68, 0x76, 0x63, 0x43],
   mp4a: [0x6d, 0x70, 0x34, 0x61],
   esds: [0x65, 0x73, 0x64, 0x73],
   mp3: [0x2e, 0x6d, 0x70, 0x33],
@@ -229,7 +233,8 @@ function dref(): Uint8Array {
 function stsd(track: MP4Track): Uint8Array {
   const entries: Uint8Array[] = [];
   if (track.type === 'video') {
-    entries.push(avc1Box(track));
+    const isHEVC = track.codec.startsWith('hev1') || track.codec.startsWith('hvc1');
+    entries.push(isHEVC ? hvc1Box(track) : avc1Box(track));
   } else {
     entries.push(mp4aBox(track));
   }
@@ -249,10 +254,10 @@ function avc1Box(track: MP4Track): Uint8Array {
   const firstSps = track.sps?.[0];
   const avcCData = [
     0x01,
-    firstSps?.[1] ?? 0x64, // profile
-    firstSps?.[2] ?? 0x00, // constraints
-    firstSps?.[3] ?? 0x1e, // level
-    0xff, // lengthSizeMinusOne = 3 (4 bytes)
+    firstSps?.[1] ?? 0x64,
+    firstSps?.[2] ?? 0x00,
+    firstSps?.[3] ?? 0x1e,
+    0xff,
     0xe0 | (track.sps?.length || 0),
     ...spsArr,
     track.pps?.length || 0,
@@ -262,15 +267,68 @@ function avc1Box(track: MP4Track): Uint8Array {
   const avcC = box(t('avcC'), new Uint8Array(avcCData));
 
   return box(t('avc1'),
-    zeros(6), w16(1), // data reference index
-    w16(0), w16(0), // version, revision
-    w32(0), w32(0), w32(0), // vendor, temporal quality, spatial quality
+    zeros(6), w16(1),
+    w16(0), w16(0),
+    w32(0), w32(0), w32(0),
     w16(track.width || 0), w16(track.height || 0),
-    w32(0x00480000), w32(0x00480000), // resolution
-    w32(0), w16(1), // data size, frame count
-    zeros(32), // compressor name
-    w16(0x0018), w16(0xffff), // depth, color table
+    w32(0x00480000), w32(0x00480000),
+    w32(0), w16(1),
+    zeros(32),
+    w16(0x0018), w16(0xffff),
     avcC,
+  );
+}
+
+function hvc1Box(track: MP4Track): Uint8Array {
+  const sps = track.sps || [];
+  const pps = track.pps || [];
+  const vps = track.vps;
+
+  const arrayData: number[] = [];
+  // VPS
+  if (vps && vps.length > 0) {
+    arrayData.push(0xa0, (vps[0].byteLength >>> 8) & 0xff, vps[0].byteLength & 0xff);
+    arrayData.push(...Array.from(vps[0]));
+  }
+  // SPS
+  if (sps.length > 0) {
+    arrayData.push(0xa1, (sps[0].byteLength >>> 8) & 0xff, sps[0].byteLength & 0xff);
+    arrayData.push(...Array.from(sps[0]));
+  }
+  // PPS
+  if (pps.length > 0) {
+    arrayData.push(0xa2, (pps[0].byteLength >>> 8) & 0xff, pps[0].byteLength & 0xff);
+    arrayData.push(...Array.from(pps[0]));
+  }
+
+  const firstSps = sps[0];
+  const hvcCData = [
+    0x01,
+    (firstSps?.[1] ?? 0) > 1 ? 0x20 : 0x00,
+    firstSps?.[1] ? (firstSps[1] & 0x1f) : 1,
+    0x00, 0x00, 0x00, 0x00,
+    0xf0, 0x00, 0xfc, 0xfd,
+    0xf8, 0xf8, 0x00, 0x00, 0x0f,
+    0x03,
+    firstSps?.[12] ?? 30,
+    0x01, 0x00, 0x01,
+    0x02,
+    ...arrayData,
+  ];
+
+  const hvcC = box(t('hvcC'), new Uint8Array(hvcCData));
+
+  const codecBoxType = track.codec.startsWith('hev1') ? t('hev1') : t('hvc1');
+  return box(codecBoxType,
+    zeros(6), w16(1),
+    w16(0), w16(0),
+    w32(0), w32(0), w32(0),
+    w16(track.width || 0), w16(track.height || 0),
+    w32(0x00480000), w32(0x00480000),
+    w32(0), w16(1),
+    zeros(32),
+    w16(0x0018), w16(0xffff),
+    hvcC,
   );
 }
 
@@ -404,10 +462,7 @@ export function initSegment(tracks: MP4Track[]): Uint8Array {
   return result;
 }
 
-let _sequenceNumber = 0;
-
-export function fragmentBox(track: MP4Track, samples: MP4Sample[], baseDts: number): { moof: Uint8Array; mdat: Uint8Array } {
-  _sequenceNumber++;
+export function fragmentBox(track: MP4Track, samples: MP4Sample[], baseDts: number, sequenceNumber: number): { moof: Uint8Array; mdat: Uint8Array } {
 
   const trafBoxes: Uint8Array[] = [
     tfhd(track),
@@ -418,7 +473,7 @@ export function fragmentBox(track: MP4Track, samples: MP4Sample[], baseDts: numb
   trafBoxes.push(trunBox);
 
   const moof = box(t('moof'),
-    box(t('mfhd'), w8(0), zeros(3), w32(_sequenceNumber)),
+    box(t('mfhd'), w8(0), zeros(3), w32(sequenceNumber)),
     box(t('traf'), ...trafBoxes),
   );
 
@@ -444,7 +499,7 @@ export function fragmentBox(track: MP4Track, samples: MP4Sample[], baseDts: numb
         moof[i + 2] === trunType[2] && moof[i + 3] === trunType[3]) {
       // Found trun box type at offset i (within the box, after the size field)
       // trun layout after type: version (1) + flags (3) + sample_count (4) + data_offset (4)
-      const dataOffsetFieldPos = i + 4 + 4; // +4 for version+flags, +4 for sample_count
+      const dataOffsetFieldPos = i + 12; // skip 'trun' type(4) + version(1) + flags(3) + sample_count(4)
       dv.setInt32(dataOffsetFieldPos, actualDataOffset);
       break;
     }

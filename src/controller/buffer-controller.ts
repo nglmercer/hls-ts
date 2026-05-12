@@ -18,6 +18,8 @@ export class BufferController {
   private _appending: boolean = false;
   private _sourceBufferReady: boolean = false;
   private _pendingCodecs: CodecInfo | null = null;
+  private _evicting: boolean = false;
+  private _retryData: ArrayBuffer | null = null;
 
   constructor(hls: Hls) {
     this.hls = hls;

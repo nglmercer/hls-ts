@@ -7,6 +7,7 @@ export interface DemuxedVideoTrack {
   height: number;
   sps: Uint8Array[];
   pps: Uint8Array[];
+  vps?: Uint8Array[];
   codec: string;
   samples: DemuxedVideoSample[];
 }
@@ -49,6 +50,7 @@ export interface IDemuxer {
   addVideoSample(sample: DemuxedVideoSample): void;
   addAudioSample(sample: DemuxedAudioSample): void;
   setVideoMeta(width: number, height: number, sps: Uint8Array[], pps: Uint8Array[]): void;
+  setVideoVPS(vps: Uint8Array): void;
   setVideoPPS(pps: Uint8Array): void;
   setAudioConfig(config: Uint8Array, sampleRate: number, channelCount: number): void;
 }

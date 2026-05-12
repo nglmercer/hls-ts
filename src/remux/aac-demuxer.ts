@@ -9,6 +9,11 @@ export class AACDemuxer implements IDemuxer {
     this._aacStream = new AacStream();
   }
 
+  set discontinuity(_value: boolean) {
+    this._audioTrack = undefined;
+    this._aacStream.flush(this);
+  }
+
   demux(data: Uint8Array, timeOffset: number): DemuxResult {
     this._audioTrack = undefined;
     
@@ -52,6 +57,7 @@ export class AACDemuxer implements IDemuxer {
 
   setVideoMeta(_width: number, _height: number, _sps: Uint8Array[], _pps: Uint8Array[]): void {}
   setVideoPPS(_pps: Uint8Array): void {}
+  setVideoVPS(_vps: Uint8Array): void {}
 
   setAudioConfig(config: Uint8Array, sampleRate: number, channelCount: number): void {
     const track = this._initAudioTrack();

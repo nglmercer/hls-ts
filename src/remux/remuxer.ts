@@ -20,6 +20,7 @@ export interface RemuxedTrack {
   codec: string;
   sps: Uint8Array[];
   pps: Uint8Array[];
+  vps?: Uint8Array[];
   channelCount?: number;
   sampleRate?: number;
   config?: Uint8Array;
@@ -40,6 +41,9 @@ export class Remuxer {
   private _audioTrack?: RemuxedTrack;
   private _initSent: boolean = false;
   private _baseDts: number = 0;
+  private _sequenceNumber: number = 0;
+  private _nextAudioPts: number = -1;
+  private _nextVideoPts: number = -1;
 
   remux(demuxResult: DemuxResult, baseDts: number): RemuxResult {
     const result: RemuxResult = {};
@@ -81,7 +85,7 @@ export class Remuxer {
       const track = this._videoTrack!;
       const mp4Track = this._toMP4Track(track);
       const mp4Samples = videoSamples.map(s => this._toMP4Sample(s));
-      const { moof, mdat } = fragmentBox(mp4Track, mp4Samples, baseDts);
+      const { moof, mdat } = fragmentBox(mp4Track, mp4Samples, baseDts, ++this._sequenceNumber);
       result.videoData = concat(moof, mdat);
       result.videoTrack = track;
     }
@@ -89,8 +93,38 @@ export class Remuxer {
     if (audioSamples.length > 0) {
       const track = this._audioTrack!;
       const mp4Track = this._toMP4Track(track);
-      const mp4Samples = audioSamples.map(s => this._toMP4Sample(s));
-      const { moof, mdat } = fragmentBox(mp4Track, mp4Samples, baseDts);
+      let mp4Samples = audioSamples.map(s => this._toMP4Sample(s));
+
+      // Insert silence for gaps
+      if (this._nextAudioPts >= 0 && mp4Samples.length > 0) {
+        const firstSamplePts = mp4Samples[0].cts + baseDts;
+        const gap = firstSamplePts - this._nextAudioPts;
+        if (gap > 0 && gap < 90000) {
+          const silenceFrame = generateSilentFrame(track);
+          const silenceDuration = Math.round(1024 * 90000 / (track.sampleRate || 44100));
+          let silencePts = this._nextAudioPts;
+          const filledSamples: typeof mp4Samples = [];
+          while (silencePts + silenceDuration <= firstSamplePts) {
+            filledSamples.push({
+              size: silenceFrame.length,
+              duration: silenceDuration,
+              cts: silencePts - baseDts,
+              flags: { isLeading: 0, isDependedOn: 2, hasRedundancy: 0, degradPrio: 0, dependsOn: 2, isSync: true },
+              data: silenceFrame,
+            });
+            silencePts += silenceDuration;
+          }
+          filledSamples.push(...mp4Samples);
+          mp4Samples = filledSamples;
+        }
+      }
+
+      if (mp4Samples.length > 0) {
+        const lastSample = mp4Samples[mp4Samples.length - 1];
+        this._nextAudioPts = lastSample.cts + baseDts + lastSample.duration;
+      }
+
+      const { moof, mdat } = fragmentBox(mp4Track, mp4Samples, baseDts, ++this._sequenceNumber);
       result.audioData = concat(moof, mdat);
       result.audioTrack = track;
     }
@@ -111,6 +145,9 @@ export class Remuxer {
     this._audioTrack = undefined;
     this._initSent = false;
     this._baseDts = 0;
+    this._sequenceNumber = 0;
+    this._nextAudioPts = -1;
+    this._nextVideoPts = -1;
   }
 
   private _remuxVideo(track: DemuxedVideoTrack): void {
@@ -124,6 +161,7 @@ export class Remuxer {
       codec: track.codec,
       sps: track.sps,
       pps: track.pps,
+      vps: track.vps,
       samples: track.samples.map(s => ({
         size: s.size,
         duration: s.duration,
@@ -177,6 +215,7 @@ export class Remuxer {
       codec: track.codec,
       sps: track.sps,
       pps: track.pps,
+      vps: track.vps,
       channelCount: track.channelCount,
       sampleRate: track.sampleRate,
       audioConfig: track.config,
@@ -210,4 +249,16 @@ function concat(...arrays: Uint8Array[]): Uint8Array {
     offset += arr.length;
   }
   return result;
+}
+
+function generateSilentFrame(track: RemuxedTrack): Uint8Array {
+  const sampleRate = track.sampleRate || 44100;
+  const channels = track.channelCount || 2;
+  // AAC silent frame: raw AAC block with fill_element (FIL)
+  // For standard AAC, a silent frame can be 0x21 0x10 0x04 0x60 0x8c 0x1c or longer
+  // This is a minimal valid AAC silent frame for LC-AAC 44100Hz stereo
+  if (sampleRate >= 44100) {
+    return new Uint8Array([0x21, 0x10, 0x04, 0x60, 0x8c, 0x1c]);
+  }
+  return new Uint8Array([0x21, 0x00, 0x49, 0x90, 0x02, 0x19, 0x00, 0x23, 0x00]);
 }

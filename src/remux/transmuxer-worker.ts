@@ -27,6 +27,11 @@ ctx.onmessage = (e: MessageEvent<TransmuxerRequest>) => {
       const data = request.data;
       let remuxResult;
 
+      if (request.discontinuity) {
+        tsDemuxer.discontinuity = true;
+        aacDemuxer.discontinuity = true;
+      }
+
       if (CodecUtils.isMP4(data)) {
         remuxResult = passThroughRemuxer.remux(data);
       } else if (data[0] === 0xff && (data[1] & 0xf0) === 0xf0) {

@@ -1,4 +1,4 @@
-export type EventHandler = (...args: any[]) => void;
+export type EventHandler = (...args: any[]) => void | Promise<void>;
 
 export interface HlsEventEmitter {
   on(event: string, handler: EventHandler): void;

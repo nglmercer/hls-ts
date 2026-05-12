@@ -158,6 +158,7 @@ export class MP3Demuxer implements IDemuxer {
   }
   setVideoMeta(_width: number, _height: number, _sps: Uint8Array[], _pps: Uint8Array[]): void {}
   setVideoPPS(_pps: Uint8Array): void {}
+  setVideoVPS(_vps: Uint8Array): void {}
   setAudioConfig(config: Uint8Array, sampleRate: number, channelCount: number): void {
     const track = this._initAudioTrack();
     track.config = config;

@@ -20,6 +20,7 @@ export class StreamController {
   private _loading: boolean = false;
   private _paused: boolean = false;
   private _pendingData: ArrayBuffer | null = null;
+  private _lastCC: Map<number, number> = new Map();
 
   constructor(hls: Hls, levelController: LevelController, abrController: AbrController) {
     this.hls = hls;
@@ -54,7 +55,7 @@ export class StreamController {
     this._loadNextFragment();
   };
 
-  _onFragLoaded = async (data: { frag: Fragment; stats: { loaded: number; total: number; trequest: number; tfirst: number; tload: number } }): void => {
+  _onFragLoaded = async (data: { frag: Fragment; stats: { loaded: number; total: number; trequest: number; tfirst: number; tload: number } }) => {
     const { frag, stats } = data;
     this._loading = false;
 
@@ -148,7 +149,12 @@ export class StreamController {
 
     try {
       const baseDts = Math.round(frag.start * 90000);
-      const { remuxResult } = await this._transmuxer.transmux(uint8, frag.start, baseDts);
+      const level = frag.level;
+      const lastCC = this._lastCC.get(level);
+      const discontinuity = lastCC !== undefined && frag.cc !== lastCC + 1;
+      this._lastCC.set(level, frag.cc);
+
+      const { remuxResult } = await this._transmuxer.transmux(uint8, frag.start, baseDts, discontinuity);
 
       if (!remuxResult) return;
 

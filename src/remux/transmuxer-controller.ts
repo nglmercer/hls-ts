@@ -1,11 +1,12 @@
 import { TransmuxerMessages, type TransmuxerRequest, type TransmuxerResponse } from './transmuxer-types';
-import type { DemuxResult } from './types';
-import type { RemuxResult } from './remuxer';
+import { InlineTransmuxer } from './inline-transmuxer';
 
 export class TransmuxerController {
   private _worker: Worker | null = null;
+  private _inline: InlineTransmuxer | null = null;
   private _requestId = 0;
   private _callbacks: Map<number, (res: TransmuxerResponse) => void> = new Map();
+  private _useWorker: boolean = false;
 
   constructor() {
     this._initWorker();
@@ -13,7 +14,6 @@ export class TransmuxerController {
 
   private _initWorker() {
     try {
-      // The worker is bundled and served at /transmuxer-worker.js by the demo server
       const workerUrl = new URL('/transmuxer-worker.js', window.location.origin);
       this._worker = new Worker(workerUrl, { type: 'module' });
       this._worker.onmessage = (e: MessageEvent<TransmuxerResponse>) => {
@@ -24,33 +24,41 @@ export class TransmuxerController {
           this._callbacks.delete(response.id);
         }
       };
+      this._useWorker = true;
     } catch (err) {
-      console.warn('[TransmuxerController] Failed to create worker, falling back to main thread (not implemented yet)', err);
+      console.warn('[TransmuxerController] Worker unavailable, using inline transmuxer', err);
+      this._inline = new InlineTransmuxer();
+      this._useWorker = false;
     }
   }
 
-  transmux(data: Uint8Array, timeOffset: number, baseDts: number): Promise<TransmuxerResponse> {
+  transmux(data: Uint8Array, timeOffset: number, baseDts: number, discontinuity: boolean = false): Promise<TransmuxerResponse> {
     return new Promise((resolve) => {
       const id = this._requestId++;
-      this._callbacks.set(id, resolve);
 
-      const request: TransmuxerRequest = {
-        type: TransmuxerMessages.DEMUX,
-        id,
-        data,
-        timeOffset,
-        baseDts,
-      };
-
-      if (this._worker) {
+      if (this._useWorker && this._worker) {
+        this._callbacks.set(id, resolve);
+        const request: TransmuxerRequest = {
+          type: TransmuxerMessages.DEMUX,
+          id,
+          data,
+          timeOffset,
+          baseDts,
+          discontinuity,
+        };
         this._worker.postMessage(request, [data.buffer]);
+      } else if (this._inline) {
+        const response = this._inline.transmux(data, timeOffset, baseDts, discontinuity, id);
+        resolve(response);
       }
     });
   }
 
   reset() {
-    if (this._worker) {
+    if (this._useWorker && this._worker) {
       this._worker.postMessage({ type: TransmuxerMessages.RESET, id: -1 });
+    } else if (this._inline) {
+      this._inline.reset();
     }
   }
 
@@ -58,6 +66,10 @@ export class TransmuxerController {
     if (this._worker) {
       this._worker.terminate();
       this._worker = null;
+    }
+    if (this._inline) {
+      this._inline.destroy();
+      this._inline = null;
     }
   }
 }

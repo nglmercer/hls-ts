@@ -15,6 +15,7 @@ export interface TransmuxerRequest {
   data?: Uint8Array;
   timeOffset?: number;
   baseDts?: number;
+  discontinuity?: boolean;
 }
 
 export interface TransmuxerResponse {
