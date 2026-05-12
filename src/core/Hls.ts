@@ -225,6 +225,7 @@ export class Hls implements HlsEventEmitter {
     this.on(Events.BUFFER_CODECS, bc._onBufferCodecs);
     this.on(Events.BUFFER_APPENDING, bc._onBufferAppending);
     this.on(Events.BUFFER_FLUSHING, bc._onBufferFlushing);
+    this.on(Events.LEVEL_UPDATED, bc._onLevelUpdated);
 
     this.on(Events.MANIFEST_PARSED, lc._onManifestParsed);
     this.on(Events.LEVEL_LOADING, lc._onLevelLoading);

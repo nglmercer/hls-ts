@@ -22,6 +22,7 @@ export class StreamController {
   private _seeking: boolean = false;
   private _pendingData: ArrayBuffer | null = null;
   private _lastCC: Map<number, number> = new Map();
+  private _checkBufferTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(hls: Hls, levelController: LevelController, abrController: AbrController) {
     this.hls = hls;
@@ -32,6 +33,10 @@ export class StreamController {
   }
 
   destroy(): void {
+    if (this._checkBufferTimer) {
+      clearTimeout(this._checkBufferTimer);
+      this._checkBufferTimer = null;
+    }
     this._transmuxer.destroy();
   }
 
@@ -153,6 +158,34 @@ export class StreamController {
   private _loadNextFragment(): void {
     if (this._paused || this._loading || this._seeking) return;
     if (this._fragQueue.length === 0) return;
+
+    if (this._checkBufferTimer) {
+      clearTimeout(this._checkBufferTimer);
+      this._checkBufferTimer = null;
+    }
+
+    if (this._media) {
+      const currentTime = this._media.currentTime;
+      let bufferedEnd = 0;
+      const buffered = this._media.buffered;
+      for (let i = 0; i < buffered.length; i++) {
+        if (currentTime >= buffered.start(i) && currentTime <= buffered.end(i)) {
+          bufferedEnd = buffered.end(i);
+          break;
+        }
+      }
+      if (bufferedEnd === 0 && buffered.length > 0) {
+        bufferedEnd = buffered.end(buffered.length - 1);
+      }
+
+      const bufferLen = Math.max(0, bufferedEnd - currentTime);
+      // Wait if we have buffered more than the max limit
+      if (bufferLen >= this.hls.config.maxBufferLength) {
+        this._checkBufferTimer = setTimeout(() => this._loadNextFragment(), 1000);
+        return;
+      }
+    }
+
     this._loading = true;
     this._doLoad();
   }

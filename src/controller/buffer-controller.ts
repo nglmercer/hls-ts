@@ -48,6 +48,21 @@ export class BufferController {
     }
   };
 
+  _onLevelUpdated = (data: { level: Level; details: any }): void => {
+    if (this._mediaSource && this._mediaSource.readyState === 'open') {
+      if (!data.details.live && data.details.totalduration) {
+        // Only set duration if it's different and source buffer is not updating
+        if (this._mediaSource.duration !== data.details.totalduration && (!this._sourceBuffer || !this._sourceBuffer.updating)) {
+          try {
+            this._mediaSource.duration = data.details.totalduration;
+          } catch (e) {
+            console.warn('[BufferController] Failed to set duration:', e);
+          }
+        }
+      }
+    }
+  };
+
   _onBufferCodecs = (data: CodecInfo): void => {
     this._codecs = data;
     if (this._mediaSource && this._mediaSource.readyState === 'open') {

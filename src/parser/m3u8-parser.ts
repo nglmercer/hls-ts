@@ -124,6 +124,9 @@ export function parseMediaPlaylist(data: string, baseurl: string): PlaylistParse
       isEndlist = true;
     } else if (line === '#EXT-X-DISCONTINUITY') {
       tagList.push(['EXT-X-DISCONTINUITY']);
+    } else if (line.startsWith('#EXT-X-KEY:')) {
+      const attrs = parseAttributes(line.substring('#EXT-X-KEY:'.length));
+      tagList.push(['EXT-X-KEY', attrs['METHOD'] || '', attrs['URI'] || '', attrs['IV'] || '', attrs['KEYFORMAT'] || '']);
     } else if (line.startsWith('#EXT-X-PLAYLIST-TYPE:')) {
       type = line.substring('#EXT-X-PLAYLIST-TYPE:'.length);
     } else if (line.startsWith('#EXT-X-MAP:')) {
