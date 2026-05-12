@@ -143,7 +143,7 @@ export class BufferController {
 
   private _processQueue(): void {
     if (!this._sourceBuffer || this._appending || this._queue.length === 0) return;
-    if (this._sourceBuffer.updating) return;
+    if (this._sourceBuffer.updating || (this._media && this._media.error)) return;
     try {
       this._appending = true;
       const data = this._queue.shift()!;
