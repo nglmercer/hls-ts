@@ -1,4 +1,5 @@
 import { Hls, Events } from "../index";
+import type { LevelParsed, LevelDetails, Fragment, FragmentStats, HlsError } from "../src/types";
 
 const video = document.getElementById("video") as HTMLVideoElement;
 const streamUrl = document.getElementById("streamUrl") as HTMLInputElement;
@@ -82,7 +83,7 @@ function loadSource(url: string) {
     appendLog(`Manifest loaded (${(data.length / 1024).toFixed(1)} KB)`);
   });
 
-  hls.on(Events.MANIFEST_PARSED, ({ levels }: { levels: any[] }) => {
+  hls.on(Events.MANIFEST_PARSED, ({ levels }: { levels: LevelParsed[] }) => {
     appendLog(`Parsed: ${levels.length} quality level(s)`, "log-info");
     statState.textContent = "Playing";
     statusText.textContent = "Playing";
@@ -105,15 +106,15 @@ function loadSource(url: string) {
     }
   });
 
-  hls.on(Events.LEVEL_UPDATED, ({ details }: { details: any }) => {
+  hls.on(Events.LEVEL_UPDATED, ({ details }: { details: LevelDetails }) => {
     appendLog(`Level updated: ${details.fragments?.length ?? 0} fragments (${details.live ? "LIVE" : "VOD"})`);
   });
 
-  hls.on(Events.FRAG_LOADING, ({ frag }: { frag: any }) => {
+  hls.on(Events.FRAG_LOADING, ({ frag }: { frag: Fragment }) => {
     appendLog(`Loading fragment #${frag.sn}`);
   });
 
-  hls.on(Events.FRAG_LOADED, ({ frag, stats }: { frag: any; stats: any }) => {
+  hls.on(Events.FRAG_LOADED, ({ frag, stats }: { frag: Fragment; stats: FragmentStats }) => {
     const loadMs = stats.tload - stats.tfirst;
     const bw = loadMs > 0 ? (stats.loaded * 8 * 1000) / loadMs : 0;
     const sizeKB = (stats.loaded / 1024).toFixed(0);
@@ -121,16 +122,16 @@ function loadSource(url: string) {
     updateStats();
   });
 
-  hls.on(Events.FRAG_PARSED, ({ frag }: { frag: any }) => {
+  hls.on(Events.FRAG_PARSED, ({ frag }: { frag: Fragment }) => {
     appendLog(`Parsed fragment #${frag.sn}`);
   });
 
-  hls.on(Events.FRAG_BUFFERED, ({ frag }: { frag: any }) => {
+  hls.on(Events.FRAG_BUFFERED, ({ frag }: { frag: Fragment }) => {
     appendLog(`Buffered fragment #${frag.sn}`, "log-info");
     updateStats();
   });
 
-  hls.on(Events.ERROR, (error: any) => {
+  hls.on(Events.ERROR, (error: HlsError) => {
     const type = error.type || "unknown";
     const details = error.details || "";
     const fatal = error.fatal ? " FATAL" : "";
@@ -154,7 +155,7 @@ presetSelect.addEventListener("change", () => {
   if (presetSelect.value) loadSource(presetSelect.value);
 });
 
-playBtn.addEventListener("click", () => video.play().catch(() => {}));
+playBtn.addEventListener("click", () => video.play().catch(() => { }));
 pauseBtn.addEventListener("click", () => video.pause());
 streamUrl.addEventListener("keydown", (e) => {
   if (e.key === "Enter") loadSource(streamUrl.value.trim());

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { Hls } from '../src/core/Hls';
 import { Events } from '../src/types/events';
-import { ErrorTypes } from '../src/types/errors';
+import { ErrorTypes, type HlsError } from '../src/types/errors';
 
 describe('Hls - edge cases', () => {
   it('should support static isSupported', () => {
@@ -119,7 +119,7 @@ seg1.ts
   it('should trigger timeout error via playlist loader', () => {
     const hls = new Hls();
     let timeoutEmitted = false;
-    hls.on(Events.ERROR, (err: any) => {
+    hls.on(Events.ERROR, (err: HlsError) => {
       if (err.details === 'manifestLoadTimeout') timeoutEmitted = true;
     });
 
@@ -135,7 +135,7 @@ seg1.ts
   it('should trigger network error via playlist loader', () => {
     const hls = new Hls();
     let errorEmitted = false;
-    hls.on(Events.ERROR, (err: any) => {
+    hls.on(Events.ERROR, (err: HlsError) => {
       if (err.details === 'manifestLoadError') errorEmitted = true;
     });
 

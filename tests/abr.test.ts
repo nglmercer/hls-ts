@@ -60,12 +60,12 @@ describe('AbrController', () => {
     const hlsMock = { config: { abrController: { abrEwmaFastVoD: 3, abrEwmaSlowVoD: 9 } } };
     const abr = new AbrController(hlsMock);
 
-    (abr as any)._onManifestParsed({
+    (abr as unknown as { _onManifestParsed: (data: { levels: any[] }) => void })._onManifestParsed({
       levels: [
         { id: 0, bitrate: 500000, width: 640, height: 360 },
         { id: 1, bitrate: 1000000, width: 854, height: 480 },
         { id: 2, bitrate: 2000000, width: 1280, height: 720 },
-      ],
+      ] as any,
     });
 
     expect(abr.getNextLevel(300000)).toBe(0);
@@ -91,9 +91,9 @@ describe('AbrController', () => {
     const abr = new AbrController(hlsMock);
 
     const now = performance.now();
-    (abr as any)._onFragLoaded({
-      frag: { sn: 1, level: 0 },
-      stats: { loaded: 500000, trequest: now - 1000, tfirst: now - 900, tload: now },
+    (abr as unknown as { _onFragLoaded: (data: { frag: any; stats: any }) => void })._onFragLoaded({
+      frag: { sn: 1, level: 0 } as any,
+      stats: { loaded: 500000, trequest: now - 1000, tfirst: now - 900, tload: now } as any,
     });
 
     expect(abr.bwEstimate).toBeGreaterThan(0);
@@ -108,12 +108,12 @@ describe('GapController', () => {
 
   it('should handle media attach/detach', () => {
     const gc = new GapController();
-    (gc as any)._onMediaAttached({ media: { currentTime: 10, buffered: { length: 0 }, seeking: false, paused: false } });
-    (gc as any)._onMediaDetached();
+    (gc as unknown as { _onMediaAttached: (data: { media: any }) => void })._onMediaAttached({ media: { currentTime: 10, buffered: { length: 0 }, seeking: false, paused: false } as any });
+    (gc as unknown as { _onMediaDetached: () => void })._onMediaDetached();
   });
 
   it('should not throw on buffer flushed without media', () => {
     const gc = new GapController();
-    (gc as any)._onBufferFlushed();
+    (gc as unknown as { _onBufferFlushed: () => void })._onBufferFlushed();
   });
 });

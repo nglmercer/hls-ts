@@ -19,7 +19,7 @@ describe('LevelController', () => {
     const abr = new AbrController(hls);
     const lc = new LevelController(hls, abr);
 
-    (lc as any)._onManifestParsed({
+    (lc as unknown as { _onManifestParsed: (data: any) => void })._onManifestParsed({
       levels: [
         { url: 'http://example.com/low.m3u8', bitrate: 500000, width: 640, height: 360, audioCodec: '', videoCodec: '', codecSet: 'avc1.64001e,mp4a.40.2', name: 'Low', frameRate: 30 },
         { url: 'http://example.com/high.m3u8', bitrate: 2000000, width: 1280, height: 720, audioCodec: '', videoCodec: '', codecSet: 'avc1.64001e,mp4a.40.2', name: 'High', frameRate: 30 },
@@ -40,7 +40,7 @@ describe('LevelController', () => {
     const abr = new AbrController(hls);
     const lc = new LevelController(hls, abr);
 
-    (lc as any)._onManifestParsed({
+    (lc as unknown as { _onManifestParsed: (data: any) => void })._onManifestParsed({
       levels: [
         { url: 'low.m3u8', bitrate: 500000, width: 640, height: 360, audioCodec: '', videoCodec: '', codecSet: '', name: '', frameRate: 0 },
         { url: 'high.m3u8', bitrate: 2000000, width: 1280, height: 720, audioCodec: '', videoCodec: '', codecSet: '', name: '', frameRate: 0 },
@@ -58,7 +58,7 @@ describe('LevelController', () => {
     const hls = new Hls();
     const abr = new AbrController(hls);
     const lc = new LevelController(hls, abr);
-    (lc as any)._onLevelLoading({ url: 'test.m3u8' });
+    (lc as unknown as { _onLevelLoading: (data: any) => void })._onLevelLoading({ url: 'test.m3u8' });
     lc.destroy();
   });
 
@@ -67,7 +67,7 @@ describe('LevelController', () => {
     const abr = new AbrController(hls);
     const lc = new LevelController(hls, abr);
 
-    (lc as any)._onManifestParsed({
+    (lc as unknown as { _onManifestParsed: (data: any) => void })._onManifestParsed({
       levels: [
         { url: 'low.m3u8', bitrate: 500000, width: 640, height: 360, audioCodec: '', videoCodec: '', codecSet: '', name: '', frameRate: 0 },
         { url: 'high.m3u8', bitrate: 2000000, width: 1280, height: 720, audioCodec: '', videoCodec: '', codecSet: '', name: '', frameRate: 0 },
@@ -99,8 +99,8 @@ describe('StreamController', () => {
     const lc = new LevelController(hls, abr);
     const sc = new StreamController(hls, lc, abr);
 
-    (sc as any)._onMediaAttached({ media: { currentTime: 0 } });
-    (sc as any)._onMediaDetached();
+    (sc as unknown as { _onMediaAttached: (data: any) => void })._onMediaAttached({ media: { currentTime: 0 } });
+    (sc as unknown as { _onMediaDetached: () => void })._onMediaDetached();
     sc.destroy();
   });
 
@@ -110,7 +110,7 @@ describe('StreamController', () => {
     const lc = new LevelController(hls, abr);
     const sc = new StreamController(hls, lc, abr);
 
-    (sc as any)._onManifestParsed({
+    (sc as unknown as { _onManifestParsed: (data: any) => void })._onManifestParsed({
       levels: [],
       audioTracks: [],
       subtitleTracks: [],
@@ -125,7 +125,7 @@ describe('StreamController', () => {
     const lc = new LevelController(hls, abr);
     const sc = new StreamController(hls, lc, abr);
 
-    (sc as any)._onFragLoaded({
+    (sc as unknown as { _onFragLoaded: (data: any) => void })._onFragLoaded({
       frag: { url: 'seg1.ts', sn: 0, level: 0, duration: 10, start: 0 },
       stats: { loaded: 10000, total: 10000, trequest: 0, tfirst: 1, tload: 100 },
     });
@@ -138,8 +138,8 @@ describe('StreamController', () => {
     const lc = new LevelController(hls, abr);
     const sc = new StreamController(hls, lc, abr);
 
-    (sc as any)._pendingData = new ArrayBuffer(100);
-    (sc as any)._onFragLoaded({
+    (sc as unknown as { _pendingData: ArrayBuffer | null })._pendingData = new ArrayBuffer(100);
+    (sc as unknown as { _onFragLoaded: (data: any) => void })._onFragLoaded({
       frag: { url: 'seg1.ts', sn: 0, level: 0, duration: 10, start: 0 },
       stats: { loaded: 10000, total: 10000, trequest: 0, tfirst: 1, tload: 100 },
     });

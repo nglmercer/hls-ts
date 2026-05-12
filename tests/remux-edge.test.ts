@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { TSDemuxer } from '../src/remux/tsdemuxer';
+import { TSDemuxer, type DemuxedVideoTrack, type DemuxedAudioTrack } from '../src/remux/tsdemuxer';
 import { initSegment, fragmentBox, type MP4Track, type MP4Sample } from '../src/remux/mp4-generator';
 import { Remuxer } from '../src/remux/remuxer';
 
@@ -7,25 +7,24 @@ describe('TSDemuxer - remaining paths', () => {
   it('setVideoMeta should not throw when no videoTrack', () => {
     const demuxer = new TSDemuxer();
     // _videoTrack is undefined, should return early
-    (demuxer as any).setVideoMeta(640, 480, [new Uint8Array([0x01, 0x64, 0x00, 0x1e])], []);
+    (demuxer as unknown as { setVideoMeta: Function }).setVideoMeta(640, 480, [new Uint8Array([0x01, 0x64, 0x00, 0x1e])], []);
   });
 
   it('setVideoMeta should update codec from SPS', () => {
     const demuxer = new TSDemuxer();
     // Add a video track first
-    (demuxer as any).addVideoSample({
+    (demuxer as unknown as { addVideoSample: Function }).addVideoSample({
       size: 10, duration: 3000, dts: 0, pts: 0, keyframe: true,
       data: new Uint8Array(10),
     });
 
-    // SPS with known profile/level
     const sps = new Uint8Array([
       0x01, 0x64, 0x00, 0x1e, 0xff, 0xe1, 0x00, 0x19,
       0x67, 0x64, 0x00, 0x2a, 0xac, 0x52,
     ]);
-    (demuxer as any).setVideoMeta(1280, 720, [sps], [new Uint8Array([0x01, 0x68, 0xeb])]);
+    (demuxer as unknown as { setVideoMeta: Function }).setVideoMeta(1280, 720, [sps], [new Uint8Array([0x01, 0x68, 0xeb])]);
 
-    const vt = (demuxer as any)._videoTrack;
+    const vt = (demuxer as unknown as { _videoTrack: DemuxedVideoTrack })._videoTrack;
     expect(vt.width).toBe(1280);
     expect(vt.height).toBe(720);
     expect(vt.codec).toContain('avc1');
@@ -33,16 +32,16 @@ describe('TSDemuxer - remaining paths', () => {
 
   it('setAudioConfig should not throw when no audioTrack', () => {
     const demuxer = new TSDemuxer();
-    (demuxer as any).setAudioConfig(new Uint8Array(2), 44100, 2);
+    (demuxer as unknown as { setAudioConfig: Function }).setAudioConfig(new Uint8Array(2), 44100, 2);
   });
 
   it('setAudioConfig should update existing track', () => {
     const demuxer = new TSDemuxer();
-    (demuxer as any).addAudioSample({
+    (demuxer as unknown as { addAudioSample: Function }).addAudioSample({
       size: 8, duration: 1024, dts: 0, pts: 0, data: new Uint8Array(8),
     });
-    (demuxer as any).setAudioConfig(new Uint8Array([0x12, 0x34]), 48000, 6);
-    const at = (demuxer as any)._audioTrack;
+    (demuxer as unknown as { setAudioConfig: Function }).setAudioConfig(new Uint8Array([0x12, 0x34]), 48000, 6);
+    const at = (demuxer as unknown as { _audioTrack: DemuxedAudioTrack })._audioTrack;
     expect(at.sampleRate).toBe(48000);
     expect(at.channelCount).toBe(6);
   });
@@ -68,12 +67,12 @@ describe('TSDemuxer - remaining paths', () => {
     buf[18] = 0xf0; buf[19] = 0x01;
 
     demuxer.demux(buf, 0);
-    expect((demuxer as any)._pmtPid).toBe(0x1001);
+    expect((demuxer as unknown as { _pmtPid: number })._pmtPid).toBe(0x1001);
   });
 
   it('should handle PES continuation packets within same demux', () => {
     const demuxer = new TSDemuxer();
-    const pids: Map<number, string> = (demuxer as any)._pids;
+    const pids = (demuxer as unknown as { _pids: Map<number, string> })._pids;
     pids.set(0x101, 'video');
 
     // Two TS packets for the same PES: start + continuation
@@ -105,15 +104,15 @@ describe('TSDemuxer - remaining paths', () => {
 
   it('should handle addVideoSample when videoTrack exists', () => {
     const demuxer = new TSDemuxer();
-    (demuxer as any).addVideoSample({
+    (demuxer as unknown as { addVideoSample: Function }).addVideoSample({
       size: 10, duration: 3000, dts: 0, pts: 0, keyframe: true,
       data: new Uint8Array(10),
     });
-    (demuxer as any).addVideoSample({
+    (demuxer as unknown as { addVideoSample: Function }).addVideoSample({
       size: 5, duration: 3000, dts: 3000, pts: 3000, keyframe: false,
       data: new Uint8Array(5),
     });
-    const vt = (demuxer as any)._videoTrack;
+    const vt = (demuxer as unknown as { _videoTrack: DemuxedVideoTrack })._videoTrack;
     expect(vt.samples.length).toBe(2);
   });
 });
@@ -215,5 +214,5 @@ describe('Remuxer - edge cases', () => {
 });
 
 function resetRemuxState(remuxer: Remuxer): void {
-  (remuxer as any)._initSent = true;
+  (remuxer as unknown as { _initSent: boolean })._initSent = true;
 }

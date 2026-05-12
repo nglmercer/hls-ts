@@ -1,6 +1,7 @@
 import { describe, it, expect, afterAll } from 'bun:test';
 import { Hls } from '../src/core/Hls';
-import { Events } from '../src/types';
+import { Events, type HlsError } from '../src/types';
+import { type PlaylistLoader } from '../src/loader/playlist-loader';
 
 const originalFetch = globalThis.fetch;
 
@@ -23,8 +24,8 @@ describe('Hls core - manifest loading callbacks', () => {
 http://test.com/high.m3u8`;
 
     // Replace the playlistLoader's internal fetch behavior
-    (hls as any).playlistLoader = {
-      load: (_ctx: { url: string }, callbacks: any) => {
+    (hls as unknown as { playlistLoader: Partial<PlaylistLoader> }).playlistLoader = {
+      load: (_ctx: { url: string }, callbacks: { onSuccess: Function }) => {
         const baseurl = _ctx.url.substring(0, _ctx.url.lastIndexOf('/') + 1);
         callbacks.onSuccess(
           { url: _ctx.url, data: playlistData, stats: { loaded: playlistData.length, total: playlistData.length, trequest: 0, tfirst: 1, tload: 10 } },
@@ -60,8 +61,8 @@ http://test.com/high.m3u8`;
 seg0.ts
 #EXT-X-ENDLIST`;
 
-    (hls as any).playlistLoader = {
-      load: (_ctx: { url: string }, callbacks: any) => {
+    (hls as unknown as { playlistLoader: Partial<PlaylistLoader> }).playlistLoader = {
+      load: (_ctx: { url: string }, callbacks: { onSuccess: Function }) => {
         callbacks.onSuccess(
           { url: _ctx.url, data: playlistData, stats: { loaded: playlistData.length, total: playlistData.length, trequest: 0, tfirst: 1, tload: 10 } },
           { loaded: playlistData.length, total: playlistData.length, trequest: 0, tfirst: 1, tload: 10 },
@@ -86,8 +87,8 @@ seg0.ts
     restoreFetch();
     const hls = new Hls();
 
-    (hls as any).playlistLoader = {
-      load: (_ctx: { url: string }, callbacks: any) => {
+    (hls as unknown as { playlistLoader: Partial<PlaylistLoader> }).playlistLoader = {
+      load: (_ctx: { url: string }, callbacks: { onError: Function }) => {
         callbacks.onError({ code: 500, text: 'Server Error' }, _ctx);
       },
       stats: { loaded: 0, total: 0, trequest: 0, tfirst: 0, tload: 0, aborted: false },
@@ -95,7 +96,7 @@ seg0.ts
     };
 
     let errorFired = false;
-    hls.on(Events.ERROR, (err: any) => {
+    hls.on(Events.ERROR, (err: HlsError) => {
       if (err.details === 'manifestLoadError') errorFired = true;
     });
 
@@ -110,8 +111,8 @@ seg0.ts
     restoreFetch();
     const hls = new Hls();
 
-    (hls as any).playlistLoader = {
-      load: (_ctx: { url: string }, callbacks: any) => {
+    (hls as unknown as { playlistLoader: Partial<PlaylistLoader> }).playlistLoader = {
+      load: (_ctx: { url: string }, callbacks: { onTimeout: Function }) => {
         callbacks.onTimeout(
           { loaded: 0, total: 0, trequest: 0, tfirst: 0, tload: 100, aborted: false },
           _ctx,
@@ -122,7 +123,7 @@ seg0.ts
     };
 
     let timeoutFired = false;
-    hls.on(Events.ERROR, (err: any) => {
+    hls.on(Events.ERROR, (err: HlsError) => {
       if (err.details === 'manifestLoadTimeout') timeoutFired = true;
     });
 
@@ -137,8 +138,8 @@ seg0.ts
     restoreFetch();
     const hls = new Hls();
 
-    (hls as any).playlistLoader = {
-      load: (_ctx: { url: string }, callbacks: any) => {
+    (hls as unknown as { playlistLoader: Partial<PlaylistLoader> }).playlistLoader = {
+      load: (_ctx: { url: string }, callbacks: { onSuccess: Function }) => {
         const data = '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=abc\n';
         callbacks.onSuccess(
           { url: _ctx.url, data, stats: {} },
@@ -167,20 +168,20 @@ seg0.ts
 
   it('should support static MSESupported check', () => {
     // Mock MediaSource
-    const origMS = (globalThis as any).MediaSource;
-    (globalThis as any).MediaSource = class {
+    const origMS = (globalThis as unknown as { MediaSource: any }).MediaSource;
+    (globalThis as unknown as { MediaSource: any }).MediaSource = class {
       static isTypeSupported() { return true; }
     };
     expect(Hls.isMSESupported()).toBe(true);
     expect(Hls.isSupported()).toBe(true);
-    (globalThis as any).MediaSource = origMS;
+    (globalThis as unknown as { MediaSource: any }).MediaSource = origMS;
   });
 
   it('should return false for isMSESupported when MediaSource is absent', () => {
-    const origMS = (globalThis as any).MediaSource;
-    (globalThis as any).MediaSource = undefined;
+    const origMS = (globalThis as unknown as { MediaSource: any }).MediaSource;
+    (globalThis as unknown as { MediaSource: any }).MediaSource = undefined;
     expect(Hls.isMSESupported()).toBe(false);
     expect(Hls.isSupported()).toBe(false);
-    (globalThis as any).MediaSource = origMS;
+    (globalThis as unknown as { MediaSource: any }).MediaSource = origMS;
   });
 });

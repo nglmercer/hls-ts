@@ -22,8 +22,8 @@ class MockMediaSource {
     if (idx >= 0) this.sourceBuffers.splice(idx, 1);
   }
   endOfStream() {}
-  addEventListener(event: string, cb: any) {}
-  removeEventListener(event: string, cb: any) {}
+  addEventListener(event: string, cb: EventListener) {}
+  removeEventListener(event: string, cb: EventListener) {}
   static isTypeSupported(mime: string): boolean {
     return true;
   }
@@ -31,9 +31,9 @@ class MockMediaSource {
 
 describe('BufferController', () => {
   beforeAll(() => {
-    (globalThis as any).MediaSource = MockMediaSource;
-    (globalThis as any).URL.createObjectURL = () => 'blob:test';
-    (globalThis as any).URL.revokeObjectURL = () => {};
+    (globalThis as unknown as { MediaSource: any }).MediaSource = MockMediaSource;
+    (globalThis as unknown as { URL: { createObjectURL: Function; revokeObjectURL: Function } }).URL.createObjectURL = () => 'blob:test';
+    (globalThis as unknown as { URL: { revokeObjectURL: Function } }).URL.revokeObjectURL = () => {};
   });
 
   it('should create and destroy', () => {
@@ -45,25 +45,25 @@ describe('BufferController', () => {
   it('should handle media attach', () => {
     const hls = new Hls();
     const bc = new BufferController(hls);
-    const video = { src: '' } as any;
-    (bc as any)._onMediaAttached({ media: video });
+    const video = { src: '' } as unknown as HTMLVideoElement;
+    (bc as unknown as { _onMediaAttached: (data: { media: HTMLVideoElement }) => void })._onMediaAttached({ media: video });
     bc.destroy();
   });
 
   it('should handle media detach', () => {
     const hls = new Hls();
     const bc = new BufferController(hls);
-    (bc as any)._onMediaAttached({ media: { src: '' } as any });
-    (bc as any)._onMediaDetached();
+    (bc as unknown as { _onMediaAttached: (data: { media: HTMLVideoElement }) => void })._onMediaAttached({ media: { src: '' } as unknown as HTMLVideoElement });
+    (bc as unknown as { _onMediaDetached: () => void })._onMediaDetached();
     bc.destroy();
   });
 
   it('should handle manifest parsed for codec info', () => {
     const hls = new Hls();
     const bc = new BufferController(hls);
-    let codecEvent: any = null;
+    let codecEvent: { levels: any[] } | null = null;
     hls.on('bufferCodecs', (data: any) => { codecEvent = data; });
-    (bc as any)._onManifestParsed({ levels: [{ codecSet: 'avc1.64001e,mp4a.40.2' }], audioTracks: [] });
+    (bc as unknown as { _onManifestParsed: (data: any) => void })._onManifestParsed({ levels: [{ codecSet: 'avc1.64001e,mp4a.40.2' }], audioTracks: [] });
     expect(codecEvent).not.toBeNull();
     bc.destroy();
   });
@@ -73,7 +73,7 @@ describe('BufferController', () => {
     const bc = new BufferController(hls);
     let codecEvent = false;
     hls.on('bufferCodecs', () => { codecEvent = true; });
-    (bc as any)._onManifestParsed({ levels: [], audioTracks: [] });
+    (bc as unknown as { _onManifestParsed: (data: any) => void })._onManifestParsed({ levels: [], audioTracks: [] });
     expect(codecEvent).toBe(false);
     bc.destroy();
   });
@@ -81,7 +81,7 @@ describe('BufferController', () => {
   it('should handle buffer codecs without creating source buffers if media source not ready', () => {
     const hls = new Hls();
     const bc = new BufferController(hls);
-    (bc as any)._onBufferCodecs({ videoCodec: 'avc1.64001e' });
+    (bc as unknown as { _onBufferCodecs: (data: any) => void })._onBufferCodecs({ videoCodec: 'avc1.64001e' });
     bc.destroy();
   });
 
@@ -89,25 +89,25 @@ describe('BufferController', () => {
     const hls = new Hls();
     const bc = new BufferController(hls);
     const data = new ArrayBuffer(100);
-    (bc as any)._onBufferAppending({ data, type: 'video' });
+    (bc as unknown as { _onBufferAppending: (data: any) => void })._onBufferAppending({ data, type: 'video' });
     bc.destroy();
   });
 
   it('should handle buffer flushing', () => {
     const hls = new Hls();
     const bc = new BufferController(hls);
-    (bc as any)._onBufferFlushing({ startOffset: 0, endOffset: 10 });
+    (bc as unknown as { _onBufferFlushing: (data: any) => void })._onBufferFlushing({ startOffset: 0, endOffset: 10 });
     bc.destroy();
   });
 
   it('should handle media attach/detach cycle twice', () => {
     const hls = new Hls();
     const bc = new BufferController(hls);
-    const video = { src: '' } as any;
-    (bc as any)._onMediaAttached({ media: video });
-    (bc as any)._onMediaDetached();
-    (bc as any)._onMediaAttached({ media: video });
-    (bc as any)._onMediaDetached();
+    const video = { src: '' } as unknown as HTMLVideoElement;
+    (bc as unknown as { _onMediaAttached: (data: { media: HTMLVideoElement }) => void })._onMediaAttached({ media: video });
+    (bc as unknown as { _onMediaDetached: () => void })._onMediaDetached();
+    (bc as unknown as { _onMediaAttached: (data: { media: HTMLVideoElement }) => void })._onMediaAttached({ media: video });
+    (bc as unknown as { _onMediaDetached: () => void })._onMediaDetached();
     bc.destroy();
   });
 });

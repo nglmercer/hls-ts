@@ -3,7 +3,7 @@ import { CapLevelController } from '../src/controller/cap-level-controller';
 
 describe('CapLevelController', () => {
   beforeAll(() => {
-    (globalThis as any).window = {
+    (globalThis as unknown as { window: any }).window = {
       addEventListener: () => {},
       removeEventListener: () => {},
     };
@@ -28,17 +28,17 @@ describe('CapLevelController', () => {
   });
 
   it('should handle media attach with resize listener', () => {
-    const hlsMock = { levels: [] };
+    const hlsMock = { levels: [] } as any;
     const cc = new CapLevelController(hlsMock);
-    (cc as any)._onMediaAttached({ media: { clientWidth: 640, clientHeight: 480 } });
+    (cc as unknown as { _onMediaAttached: (data: any) => void })._onMediaAttached({ media: { clientWidth: 640, clientHeight: 480 } });
     cc.destroy();
   });
 
   it('should handle media attach/detach cycle', () => {
-    const hlsMock = { levels: [] };
+    const hlsMock = { levels: [] } as any;
     const cc = new CapLevelController(hlsMock);
-    (cc as any)._onMediaAttached({ media: { clientWidth: 1920, clientHeight: 1080 } });
-    (cc as any)._onMediaDetached();
+    (cc as unknown as { _onMediaAttached: (data: any) => void })._onMediaAttached({ media: { clientWidth: 1920, clientHeight: 1080 } });
+    (cc as unknown as { _onMediaDetached: () => void })._onMediaDetached();
     cc.destroy();
   });
 
@@ -48,11 +48,11 @@ describe('CapLevelController', () => {
       { id: 1, width: 640, height: 360, bitrate: 800000 },
       { id: 2, width: 1280, height: 720, bitrate: 2000000 },
     ];
-    const hlsMock = { levels };
+    const hlsMock = { levels } as any;
     const cc = new CapLevelController(hlsMock);
 
-    (cc as any)._onManifestParsed({ levels });
-    (cc as any)._onMediaAttached({ media: { clientWidth: 640, clientHeight: 480 } });
+    (cc as unknown as { _onManifestParsed: (data: any) => void })._onManifestParsed({ levels });
+    (cc as unknown as { _onMediaAttached: (data: any) => void })._onMediaAttached({ media: { clientWidth: 640, clientHeight: 480 } });
 
     cc.destroy();
   });

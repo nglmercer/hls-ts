@@ -16,7 +16,7 @@ class ThrowingSourceBuffer {
   remove(_start: number, _end: number) {
     throw new Error('remove failed');
   }
-  addEventListener(_event: string, _cb: any) {}
+  addEventListener(_event: string, _cb: EventListener) {}
 }
 
 class FailingMediaSource {
@@ -31,35 +31,35 @@ class FailingMediaSource {
     throw new Error('removeSourceBuffer failed');
   }
   endOfStream() {}
-  addEventListener(_event: string, _cb: any) {}
-  removeEventListener(_event: string, _cb: any) {}
+  addEventListener(_event: string, _cb: EventListener) {}
+  removeEventListener(_event: string, _cb: EventListener) {}
   static isTypeSupported(_mime: string) { return true; }
 }
 
 describe('BufferController - error paths', () => {
   beforeEach(() => {
-    (globalThis as any).MediaSource = FailingMediaSource;
-    (globalThis as any).URL.createObjectURL = () => 'blob:test';
-    (globalThis as any).URL.revokeObjectURL = () => {};
+    (globalThis as unknown as { MediaSource: any }).MediaSource = FailingMediaSource;
+    (globalThis as unknown as { URL: { createObjectURL: Function; revokeObjectURL: Function } }).URL.createObjectURL = () => 'blob:test';
+    (globalThis as unknown as { URL: { revokeObjectURL: Function } }).URL.revokeObjectURL = () => {};
   });
 
   afterAll(() => {
-    delete (globalThis as any).MediaSource;
+    delete (globalThis as unknown as { MediaSource: any }).MediaSource;
   });
 
   it('should handle removeSourceBuffer failure during cleanup', () => {
     const hls = new Hls();
     const bc = new BufferController(hls);
-    const video = { src: '' } as any;
+    const video = { src: '' } as unknown as HTMLVideoElement;
 
-    (bc as any)._onMediaAttached({ media: video });
-    (bc as any)._onBufferCodecs({ videoCodec: 'avc1.64001e', audioCodec: 'mp4a.40.2' });
+    (bc as unknown as { _onMediaAttached: (data: any) => void })._onMediaAttached({ media: video });
+    (bc as unknown as { _onBufferCodecs: (data: any) => void })._onBufferCodecs({ videoCodec: 'avc1.64001e', audioCodec: 'mp4a.40.2' });
     // Directly call the source open handler (covers line 78)
-    if ((bc as any)._onMediaSourceOpen) {
-      (bc as any)._onMediaSourceOpen();
+    if ((bc as unknown as { _onMediaSourceOpen?: Function })._onMediaSourceOpen) {
+      (bc as unknown as { _onMediaSourceOpen: Function })._onMediaSourceOpen();
     }
     // Now detach triggers _cleanMediaSource which tries removeSourceBuffer
-    (bc as any)._onMediaDetached();
+    (bc as unknown as { _onMediaDetached: () => void })._onMediaDetached();
 
     bc.destroy();
   });
@@ -68,16 +68,16 @@ describe('BufferController - error paths', () => {
     const hls = new Hls();
     const bc = new BufferController(hls);
 
-    (bc as any)._onMediaAttached({ media: { src: '' } as any });
-    (bc as any)._onBufferCodecs({ videoCodec: 'avc1.64001e' });
+    (bc as unknown as { _onMediaAttached: (data: any) => void })._onMediaAttached({ media: { src: '' } as unknown as HTMLVideoElement });
+    (bc as unknown as { _onBufferCodecs: (data: any) => void })._onBufferCodecs({ videoCodec: 'avc1.64001e' });
     // Trigger source open handler
-    if ((bc as any)._onMediaSourceOpen) {
-      (bc as any)._onMediaSourceOpen();
+    if ((bc as unknown as { _onMediaSourceOpen?: Function })._onMediaSourceOpen) {
+      (bc as unknown as { _onMediaSourceOpen: Function })._onMediaSourceOpen();
     }
 
     // Queue data — _processQueue will call appendBuffer which throws
     const data = new ArrayBuffer(50);
-    (bc as any)._onBufferAppending({ data, type: 'video' });
+    (bc as unknown as { _onBufferAppending: (data: any) => void })._onBufferAppending({ data, type: 'video' });
 
     bc.destroy();
   });
@@ -86,17 +86,17 @@ describe('BufferController - error paths', () => {
     const hls = new Hls();
     const bc = new BufferController(hls);
 
-    (bc as any)._onMediaAttached({ media: { src: '' } as any });
-    (bc as any)._onBufferCodecs({ videoCodec: 'avc1.64001e' });
-    if ((bc as any)._onMediaSourceOpen) {
-      (bc as any)._onMediaSourceOpen();
+    (bc as unknown as { _onMediaAttached: (data: any) => void })._onMediaAttached({ media: { src: '' } as unknown as HTMLVideoElement });
+    (bc as unknown as { _onBufferCodecs: (data: any) => void })._onBufferCodecs({ videoCodec: 'avc1.64001e' });
+    if ((bc as unknown as { _onMediaSourceOpen?: Function })._onMediaSourceOpen) {
+      (bc as unknown as { _onMediaSourceOpen: Function })._onMediaSourceOpen();
     }
 
     // Set updating flag then flush
-    if ((bc as any)._videoBuffer) {
-      (bc as any)._videoBuffer.updating = true;
+    if ((bc as unknown as { _videoBuffer: { updating: boolean } })._videoBuffer) {
+      (bc as unknown as { _videoBuffer: { updating: boolean } })._videoBuffer.updating = true;
     }
-    (bc as any)._onBufferFlushing({ startOffset: 0, endOffset: 10 });
+    (bc as unknown as { _onBufferFlushing: (data: any) => void })._onBufferFlushing({ startOffset: 0, endOffset: 10 });
 
     bc.destroy();
   });
@@ -106,12 +106,12 @@ describe('BufferController - error paths', () => {
     const bc = new BufferController(hls);
 
     // Call the update end handler directly (covers lines 137-138)
-    (bc as any)._onBufferUpdateEnd();
+    (bc as unknown as { _onBufferUpdateEnd: () => void })._onBufferUpdateEnd();
 
     // Set appending=true, then call again — should set appending=false
-    (bc as any)._appending = true;
-    (bc as any)._onBufferUpdateEnd();
-    expect((bc as any)._appending).toBe(false);
+    (bc as unknown as { _appending: boolean })._appending = true;
+    (bc as unknown as { _onBufferUpdateEnd: () => void })._onBufferUpdateEnd();
+    expect((bc as unknown as { _appending: boolean })._appending).toBe(false);
 
     bc.destroy();
   });
@@ -128,14 +128,14 @@ describe('FragmentLoader - real timeout path', () => {
 
   it('should trigger onTimeout via setTimeout expiry', async () => {
     // Mock fetch to return a promise that never resolves
-    (globalThis as any).fetch = () => new Promise(() => {}); // never resolves
+    (globalThis as unknown as { fetch: any }).fetch = () => new Promise(() => {}); // never resolves
 
     const loader = new FragmentLoader(
       { maxNumRetry: 0, retryDelayMs: 0, maxRetryDelayMs: 0 },
       5, // 5ms timeout
     );
 
-    const result: any = await new Promise((resolve) => {
+    const result = await new Promise<{ type: string }>((resolve) => {
       loader.load(
         { url: 'http://test.com/seg.ts', frag: {} as any },
         {
@@ -147,7 +147,7 @@ describe('FragmentLoader - real timeout path', () => {
     });
 
     expect(result.type).toBe('timeout');
-    globalThis.fetch = originalFetch;
+    (globalThis as unknown as { fetch: any }).fetch = originalFetch;
   });
 });
 
@@ -175,12 +175,12 @@ describe('ErrorController - retry setTimeout', () => {
     // Each retry schedules a setTimeout with backoff.
     // The 3rd call will have retryCount=3 after increments.
     for (let i = 0; i < 4; i++) {
-      (ec as any)._onError({
+      (ec as unknown as { _onError: (data: any) => void })._onError({
         type: ErrorTypes.NETWORK_ERROR,
         details: 'fragLoadError',
         fatal: true,
         reason: `Attempt ${i + 1}`,
-        frag: { url: `seg${i}.ts`, sn: i, level: 0 },
+        frag: { url: `seg${i}.ts`, sn: i, level: 0 } as any,
       });
     }
 
@@ -267,13 +267,13 @@ describe('ErrorController - retry setTimeout', () => {
       attachMedia: () => {},
     };
 
-    const ec = new ErrorController(hlsMock);
-    (ec as any)._onError({
+    const ec = new ErrorController(hlsMock as any);
+    (ec as unknown as { _onError: (data: any) => void })._onError({
       type: ErrorTypes.MUX_ERROR,
       details: 'fragParsingError',
       fatal: true,
       reason: 'parse error',
-      frag: { url: 'seg.ts', sn: 5, level: 2 },
+      frag: { url: 'seg.ts', sn: 5, level: 2 } as any,
     });
 
     // Wait for the setTimeout(..., 500) to fire
