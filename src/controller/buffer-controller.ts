@@ -104,6 +104,8 @@ export class BufferController {
     this._objectUrl = '';
     this._queue = [];
     this._appending = false;
+    this._evicting = false;
+    this._retryData = null;
     this._sourceBufferReady = false;
     this._pendingCodecs = null;
   }
@@ -131,6 +133,9 @@ export class BufferController {
         this._sourceBufferReady = true;
         this._sourceBuffer.addEventListener('updateend', () => {
           this._appending = false;
+          if (this._evicting) {
+            this._evicting = false;
+          }
           this._processQueue();
         });
         this._sourceBuffer.addEventListener('error', (e) => {
@@ -155,11 +160,15 @@ export class BufferController {
   }
 
   private _processQueue(): void {
-    if (!this._sourceBuffer || !this._sourceBufferReady || this._appending || this._queue.length === 0) return;
+    if (!this._sourceBuffer || !this._sourceBufferReady || this._appending || this._evicting) return;
     if (this._sourceBuffer.updating || (this._media && this._media.error)) return;
+
+    const data = this._retryData ?? (this._queue.length > 0 ? this._queue.shift()! : null);
+    if (!data) return;
+    this._retryData = null;
+
     try {
       this._appending = true;
-      const data = this._queue.shift()!;
       const u8 = new Uint8Array(data);
       console.log('[BufferController] appendBuffer', {
         byteLength: data.byteLength,
@@ -168,13 +177,54 @@ export class BufferController {
       if (data.byteLength === 0) {
         console.warn('[BufferController] Skipping zero-length appendBuffer');
         this._appending = false;
+        this._retryData = null;
         this._processQueue();
         return;
       }
       this._sourceBuffer.appendBuffer(data);
     } catch (err) {
-      console.error('[BufferController] appendBuffer error:', err);
-      this._appending = false;
+      const msg = (err as Error).message || '';
+      if (msg.includes('buffer') || msg.includes('Quota') || msg.includes('full')) {
+        console.warn('[BufferController] Buffer full, evicting old data');
+        this._retryData = data;
+        this._appending = false;
+        this._evictRange();
+      } else {
+        console.error('[BufferController] appendBuffer error:', err);
+        this._appending = false;
+        this._retryData = null;
+      }
+    }
+  }
+
+  private _evictRange(): void {
+    if (!this._sourceBuffer || !this._media || this._sourceBuffer.updating) {
+      this._retryData = null;
+      return;
+    }
+
+    const currentTime = this._media.currentTime;
+    const buffered = this._sourceBuffer.buffered;
+    if (buffered.length === 0) {
+      this._retryData = null;
+      return;
+    }
+
+    const evictEnd = Math.max(0, currentTime - 30);
+    const evictStart = buffered.start(0);
+
+    if (evictEnd <= evictStart) {
+      console.warn('[BufferController] No evictable range, dropping data');
+      this._retryData = null;
+      return;
+    }
+
+    this._evicting = true;
+    try {
+      this._sourceBuffer.remove(evictStart, evictEnd);
+    } catch {
+      this._evicting = false;
+      this._retryData = null;
     }
   }
 
