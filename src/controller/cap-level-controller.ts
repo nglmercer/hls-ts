@@ -1,7 +1,9 @@
 import { Events } from '../types/events';
+import type { Hls } from '../core/Hls';
+import type { Level } from '../types/level';
 
 export class CapLevelController {
-  private hls: any;
+  private hls: Hls;
   private _media: HTMLMediaElement | null = null;
   private _levels: number = 0;
   private _autoLevelCapping: number = -1;
@@ -10,7 +12,7 @@ export class CapLevelController {
   private _resizeHandler: (() => void) | null = null;
   private _firstLevel: number = 0;
 
-  constructor(hls: any) {
+  constructor(hls: Hls) {
     this.hls = hls;
   }
 
@@ -52,7 +54,7 @@ export class CapLevelController {
     this._media = null;
   };
 
-  private _onManifestParsed = (data: { levels: any[] }): void => {
+  private _onManifestParsed = (data: { levels: Level[] }): void => {
     this._levels = data.levels.length;
     this._onResize();
   };
@@ -67,7 +69,7 @@ export class CapLevelController {
     this._lastWidth = width;
     this._lastHeight = height;
 
-    const levels = this.hls.levels as any[];
+    const levels = this.hls.levels;
     if (!levels || levels.length === 0) return;
 
     const pixelArea = width * height;

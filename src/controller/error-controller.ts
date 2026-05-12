@@ -1,6 +1,7 @@
 import { Events } from '../types/events';
 import { ErrorTypes, ErrorDetails } from '../types/errors';
 import type { HlsError } from '../types/errors';
+import type { Hls } from '../core/Hls';
 
 interface RecoveryState {
   retryCount: number;
@@ -9,12 +10,12 @@ interface RecoveryState {
 }
 
 export class ErrorController {
-  private hls: any;
+  private hls: Hls;
   private _recoveryStates: Map<string, RecoveryState> = new Map();
   private _mediaSwapCount: number = 0;
   private _maxMediaSwap: number = 3;
 
-  constructor(hls: any) {
+  constructor(hls: Hls) {
     this.hls = hls;
   }
 

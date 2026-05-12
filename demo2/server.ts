@@ -4,15 +4,19 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
 
+let cachedWorker: string | null = null;
 let cachedBundle: string | null = null;
 
-async function buildDemo(): Promise<string> {
+async function buildDemo(): Promise<{ demo: string; worker: string }> {
   const result = await Bun.build({
-    entrypoints: [join(__dirname, "demo.ts")],
+    entrypoints: [
+      join(__dirname, "demo.ts"),
+      join(root, "src/remux/transmuxer-worker.ts")
+    ],
     target: "browser",
     format: "esm",
     outdir: "/tmp/hls-ts-demo-out",
-    naming: "[dir]/demo.[ext]",
+    naming: "[name].[ext]",
     sourcemap: "none",
     minify: false,
   });
@@ -22,15 +26,22 @@ async function buildDemo(): Promise<string> {
     throw new Error(`Build failed:\n${errors}`);
   }
 
-  const output = result.outputs[0];
-  if (!output) throw new Error("No output generated");
+  const demoOutput = result.outputs.find(o => o.path.endsWith("demo.js"));
+  const workerOutput = result.outputs.find(o => o.path.endsWith("transmuxer-worker.js"));
 
-  return output.text();
+  if (!demoOutput || !workerOutput) throw new Error("Missing outputs");
+
+  return {
+    demo: await demoOutput.text(),
+    worker: await workerOutput.text()
+  };
 }
 
 async function rebuild() {
   try {
-    cachedBundle = await buildDemo();
+    const { demo, worker } = await buildDemo();
+    cachedWorker = worker;
+    cachedBundle = demo;
     console.log("[demo] Bundle rebuilt successfully");
   } catch (err) {
     console.error("[demo] Build error:", (err as Error).message);
@@ -52,6 +63,13 @@ const server = Bun.serve({
     if (url.pathname === "/demo.js") {
       if (!cachedBundle) await rebuild();
       return new Response(cachedBundle, {
+        headers: { "Content-Type": "application/javascript; charset=utf-8" },
+      });
+    }
+
+    if (url.pathname === "/transmuxer-worker.js") {
+      if (!cachedWorker) await rebuild();
+      return new Response(cachedWorker, {
         headers: { "Content-Type": "application/javascript; charset=utf-8" },
       });
     }

@@ -1,3 +1,6 @@
+import type { Hls } from '../core/Hls';
+import type { Level, Fragment } from '../types/level';
+
 export class EWMA {
   private _alpha: number;
   private _estimate: number = 0;
@@ -30,7 +33,7 @@ export class EWMA {
 }
 
 export class AbrController {
-  private hls: any;
+  private hls: Hls;
   private _fastEwma: EWMA;
   private _slowEwma: EWMA;
   private _currentLevel: number = -1;
@@ -38,8 +41,9 @@ export class AbrController {
   private _lastFragLoadTime: number = 0;
   private _lastFragLoadedBytes: number = 0;
   private _bwEstimate: number = 0;
+  private _initSent: boolean = false;
 
-  constructor(hls: any) {
+  constructor(hls: Hls) {
     this.hls = hls;
     const config = hls.config.abrController;
     this._fastEwma = new EWMA(1 / (config.abrEwmaFastVoD || 3));
@@ -52,8 +56,8 @@ export class AbrController {
 
   destroy(): void {}
 
-  private _onManifestParsed = (data: { levels: any[] }): void => {
-    this._levels = data.levels.map((l: any, i: number) => ({
+  private _onManifestParsed = (data: { levels: Level[] }): void => {
+    this._levels = data.levels.map((l: Level, i: number) => ({
       id: i,
       bitrate: l.bitrate,
       width: l.width || 0,
@@ -61,7 +65,7 @@ export class AbrController {
     }));
   };
 
-  private _onFragLoaded = (data: { frag: any; stats: { trequest: number; tfirst: number; tload: number; loaded: number } }): void => {
+  private _onFragLoaded = (data: { frag: Fragment; stats: { trequest: number; tfirst: number; tload: number; loaded: number } }): void => {
     const { stats } = data;
     if (stats.trequest === 0 || stats.tfirst === 0 || stats.loaded === 0) return;
 
@@ -88,7 +92,7 @@ export class AbrController {
     this._lastFragLoadedBytes = stats.loaded;
   };
 
-  private _onLevelLoaded = (data: { level: any }): void => {
+  private _onLevelLoaded = (data: { level: Level }): void => {
     this._currentLevel = data.level?.id ?? this._currentLevel;
   };
 

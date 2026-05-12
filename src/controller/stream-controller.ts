@@ -2,8 +2,7 @@ import { Events } from '../types/events';
 import type { Hls } from '../core/Hls';
 import type { Level, Fragment, LevelDetails, ManifestData } from '../types/level';
 import { FragmentLoader } from '../loader/fragment-loader';
-import { TSDemuxer } from '../remux/tsdemuxer';
-import { Remuxer } from '../remux/remuxer';
+import { TransmuxerController } from '../remux/transmuxer-controller';
 import { ErrorTypes } from '../types/errors';
 import type { HlsError } from '../types/errors';
 import type { AbrController } from './abr-controller';
@@ -15,8 +14,7 @@ export class StreamController {
   private _levelController: LevelController;
   private _abrController: AbrController;
   private _fragmentLoader: FragmentLoader;
-  private _demuxer: TSDemuxer;
-  private _remuxer: Remuxer;
+  private _transmuxer: TransmuxerController;
   private _currentFrag: Fragment | null = null;
   private _fragQueue: Fragment[] = [];
   private _loading: boolean = false;
@@ -28,11 +26,12 @@ export class StreamController {
     this._levelController = levelController;
     this._abrController = abrController;
     this._fragmentLoader = new FragmentLoader();
-    this._demuxer = new TSDemuxer();
-    this._remuxer = new Remuxer();
+    this._transmuxer = new TransmuxerController();
   }
 
-  destroy(): void {}
+  destroy(): void {
+    this._transmuxer.destroy();
+  }
 
   _onMediaAttached = (data: { media: HTMLMediaElement }): void => {
     this._media = data.media;
@@ -51,7 +50,7 @@ export class StreamController {
     this._loadNextFragment();
   };
 
-  _onFragLoaded = (data: { frag: Fragment; stats: { loaded: number; total: number; trequest: number; tfirst: number; tload: number } }): void => {
+  _onFragLoaded = async (data: { frag: Fragment; stats: { loaded: number; total: number; trequest: number; tfirst: number; tload: number } }): void => {
     const { frag, stats } = data;
     this._loading = false;
 
@@ -72,7 +71,7 @@ export class StreamController {
       }
     }
 
-    this._processFragment(responseData, frag);
+    await this._processFragment(responseData, frag);
     this._loadNextFragment();
   }
 
@@ -140,13 +139,14 @@ export class StreamController {
     );
   }
 
-  private _processFragment(data: ArrayBuffer, frag: Fragment): void {
+  private async _processFragment(data: ArrayBuffer, frag: Fragment): Promise<void> {
     const uint8 = new Uint8Array(data);
 
     try {
-      const demuxResult = this._demuxer.demux(uint8, frag.start);
       const baseDts = Math.round(frag.start * 90000);
-      const remuxResult = this._remuxer.remux(demuxResult, baseDts);
+      const { remuxResult } = await this._transmuxer.transmux(uint8, frag.start, baseDts);
+
+      if (!remuxResult) return;
 
       // Append init segment first (contains ftyp + moov with all tracks)
       if (remuxResult.initSegment) {

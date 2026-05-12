@@ -1,5 +1,6 @@
 import { Events } from '../types/events';
 import type { Hls } from '../core/Hls';
+import type { Level } from '../types/level';
 
 interface CodecInfo {
   videoCodec?: string;
@@ -37,7 +38,7 @@ export class BufferController {
     this._cleanMediaSource();
   };
 
-  _onManifestParsed = (data: { levels: any[]; audioTracks: any[] }): void => {
+  _onManifestParsed = (data: { levels: Level[]; audioTracks: any[] }): void => {
     if (data.levels.length > 0) {
       const level = data.levels[0];
       const codecs = this._parseCodecs(level);
@@ -154,7 +155,7 @@ export class BufferController {
     }
   }
 
-  private _parseCodecs(level: any): CodecInfo {
+  private _parseCodecs(level: Level): CodecInfo {
     const codecInfo: CodecInfo = {};
     if (level.codecSet) {
       const parts = level.codecSet.split(',');
