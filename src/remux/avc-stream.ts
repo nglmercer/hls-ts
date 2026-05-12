@@ -6,6 +6,13 @@ export class AvcStream {
   private _lastPts: number = 0;
   private _lastDts: number = 0;
 
+  private _hasSlice(): boolean {
+    return this._naluData.some(n => {
+      const type = n[0] & 0x1f;
+      return type === 1 || type === 5;
+    });
+  }
+
   parse(data: Uint8Array, pts: number, dts: number, demuxer: IDemuxer): void {
     const nalus = this._findNALUs(data);
 
@@ -14,29 +21,32 @@ export class AvcStream {
       const naluType = nalu[0] & 0x1f;
 
       if (naluType === 7) {
-        // SPS — extract width/height via Exp-Golomb
         const dims = parseSPS(nalu);
         demuxer.setVideoMeta(dims.width, dims.height, [nalu], []);
-        continue;
-      }
-
-      if (naluType === 8) {
-        // PPS
+      } else if (naluType === 8) {
         demuxer.setVideoPPS(nalu);
-        continue;
       }
 
-      // Access unit delimiter — skip
-      if (naluType === 9) continue;
-      // SEI — skip
-      if (naluType === 6) continue;
+      let isNewAccessUnit = false;
 
-      // Slice NALUs (1=non-IDR, 5=IDR)
-      if (naluType === 1 || naluType === 5) {
-        // This starts a new access unit — flush previous
-        if (this._naluData.length > 0) {
-          this._emitSample(demuxer);
+      // Metadata NALUs indicate a new frame IF we already have a slice from the previous frame
+      if (naluType === 9 || naluType === 7 || naluType === 8 || naluType === 6) {
+        if (this._hasSlice()) {
+          isNewAccessUnit = true;
         }
+      } else if (naluType === 1 || naluType === 5) {
+        // If it's a slice, check if it's the first slice of a picture
+        const isFirstSlice = (nalu[1] & 0x80) !== 0;
+        if (isFirstSlice && this._hasSlice()) {
+          isNewAccessUnit = true;
+        }
+      }
+
+      if (isNewAccessUnit) {
+        this._emitSample(demuxer);
+      }
+
+      if (this._naluData.length === 0) {
         this._lastPts = pts;
         this._lastDts = dts;
       }

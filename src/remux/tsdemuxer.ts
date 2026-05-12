@@ -68,8 +68,7 @@ export class TSDemuxer implements IDemuxer {
       this._parsePacket(packet);
       offset += TS_PACKET_SIZE;
     }
-
-    this._flush();
+    //this._flush();
 
     return {
       videoTrack: this._videoTrack,
