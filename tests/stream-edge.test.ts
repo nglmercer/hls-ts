@@ -10,7 +10,7 @@ describe('StreamController - edge cases', () => {
     const lc = new LevelController(hls, abr);
 
     // Set up a level
-    (lc as any)._onManifestParsed({
+    (lc as unknown as { _onManifestParsed: (data: any) => void })._onManifestParsed({
       levels: [{ url: 'http://example.com/test.m3u8', bitrate: 500000, width: 640, height: 360, audioCodec: '', videoCodec: '', codecSet: 'avc1.64001e', name: 'Test', frameRate: 30 }],
       audioTracks: [],
       subtitleTracks: [],
@@ -19,10 +19,10 @@ describe('StreamController - edge cases', () => {
 
     // Trigger level loaded for that level
     const frags = [{ sn: 0, duration: 10, url: 'seg0.ts' }, { sn: 1, duration: 10, url: 'seg1.ts' }];
-    (lc as any)._onLevelLoaded({
+    (lc as unknown as { _onLevelLoaded: (data: any) => void })._onLevelLoaded({
       url: 'http://example.com/test.m3u8',
       data: '#EXTM3U',
-      fragments: frags,
+      fragments: frags as any,
       targetduration: 10,
       live: false,
       type: 'VOD',
@@ -41,14 +41,14 @@ describe('StreamController - edge cases', () => {
     const abr = new AbrController(hls);
     const lc = new LevelController(hls, abr);
 
-    (lc as any)._onManifestParsed({
+    (lc as unknown as { _onManifestParsed: (data: any) => void })._onManifestParsed({
       levels: [{ url: 'http://example.com/test.m3u8', bitrate: 500000, width: 640, height: 360, audioCodec: '', videoCodec: '', codecSet: '', name: '', frameRate: 0 }],
       audioTracks: [],
       subtitleTracks: [],
       url: 'http://example.com/master.m3u8',
     });
 
-    (lc as any)._onLevelLoaded({
+    (lc as unknown as { _onLevelLoaded: (data: any) => void })._onLevelLoaded({
       url: 'http://example.com/other.m3u8',
       data: '',
       fragments: [],
@@ -66,17 +66,17 @@ describe('StreamController - edge cases', () => {
     const abr = new AbrController(hls);
     const lc = new LevelController(hls, abr);
 
-    (lc as any)._onManifestParsed({
+    (lc as unknown as { _onManifestParsed: (data: any) => void })._onManifestParsed({
       levels: [{ url: 'live.m3u8', bitrate: 500000, width: 640, height: 360, audioCodec: '', videoCodec: '', codecSet: '', name: '', frameRate: 0 }],
       audioTracks: [],
       subtitleTracks: [],
       url: 'master.m3u8',
     });
 
-    (lc as any)._onLevelLoaded({
+    (lc as unknown as { _onLevelLoaded: (data: any) => void })._onLevelLoaded({
       url: 'live.m3u8',
       data: '#EXTM3U',
-      fragments: [{ sn: 100, duration: 6, url: 'seg100.ts' }],
+      fragments: [{ sn: 100, duration: 6, url: 'seg100.ts' }] as any,
       targetduration: 6,
       live: true,
       type: 'EVENT',
@@ -95,7 +95,7 @@ describe('StreamController - edge cases', () => {
     let errorFired = false;
     hls.on('hlsError', () => { errorFired = true; });
 
-    (lc as any)._onManifestParsed({
+    (lc as unknown as { _onManifestParsed: (data: any) => void })._onManifestParsed({
       levels: [{ url: 'http://test.io/bad.m3u8', bitrate: 500000, width: 640, height: 360, audioCodec: '', videoCodec: '', codecSet: '', name: '', frameRate: 0 }],
       audioTracks: [],
       subtitleTracks: [],
@@ -116,9 +116,9 @@ describe('StreamController - edge cases', () => {
     const sc = new StreamController(hls, lc, abr);
 
     // pendingData is null, frag loaded handler should return early
-    (sc as any)._onFragLoaded({
-      frag: { url: 'seg1.ts', sn: 0, level: 0, duration: 10, start: 0 },
-      stats: { loaded: 1000, total: 1000, trequest: 0, tfirst: 1, tload: 100 },
+    (sc as unknown as { _onFragLoaded: (data: any) => void })._onFragLoaded({
+      frag: { url: 'seg1.ts', sn: 0, level: 0, duration: 10, start: 0 } as any,
+      stats: { loaded: 1000, total: 1000, trequest: 0, tfirst: 1, tload: 100 } as any,
     });
     sc.destroy();
   });
@@ -130,7 +130,7 @@ describe('StreamController - edge cases', () => {
     const sc = new StreamController(hls, lc, abr);
 
     // No fragment, _fragQueue is empty, should do nothing
-    (sc as any)._loadNextFragment();
+    (sc as unknown as { _loadNextFragment: () => void })._loadNextFragment();
     sc.destroy();
   });
 
@@ -141,11 +141,11 @@ describe('StreamController - edge cases', () => {
     const sc = new StreamController(hls, lc, abr);
 
     // Set loading=true and try to load next fragment
-    (sc as any)._loading = true;
-    (sc as any)._fragQueue = [{ url: 'seg.ts', sn: 0, level: 0, duration: 10, start: 0 }];
-    (sc as any)._loadNextFragment();
+    (sc as unknown as { _loading: boolean })._loading = true;
+    (sc as unknown as { _fragQueue: any[] })._fragQueue = [{ url: 'seg.ts', sn: 0, level: 0, duration: 10, start: 0 }];
+    (sc as unknown as { _loadNextFragment: () => void })._loadNextFragment();
     // Should not load because _loading is true
-    expect((sc as any)._loading).toBe(true);
+    expect((sc as unknown as { _loading: boolean })._loading).toBe(true);
     sc.destroy();
   });
 
@@ -156,7 +156,7 @@ describe('StreamController - edge cases', () => {
     const sc = new StreamController(hls, lc, abr);
 
     // Set up levels and current level
-    (lc as any)._onManifestParsed({
+    (lc as unknown as { _onManifestParsed: (data: any) => void })._onManifestParsed({
       levels: [
         { url: 'low.m3u8', bitrate: 500000, width: 640, height: 360, audioCodec: '', videoCodec: '', codecSet: '', name: '', frameRate: 0 },
         { url: 'high.m3u8', bitrate: 2000000, width: 1280, height: 720, audioCodec: '', videoCodec: '', codecSet: '', name: '', frameRate: 0 },
@@ -167,12 +167,12 @@ describe('StreamController - edge cases', () => {
     });
 
     // Set pending data and trigger frag loaded
-    (sc as any)._pendingData = new ArrayBuffer(100);
-    (sc as any)._fragQueue = [{ url: 'seg2.ts', sn: 1, level: 1, duration: 10, start: 10 }];
+    (sc as unknown as { _pendingData: ArrayBuffer | null })._pendingData = new ArrayBuffer(100);
+    (sc as unknown as { _fragQueue: any[] })._fragQueue = [{ url: 'seg2.ts', sn: 1, level: 1, duration: 10, start: 10 }];
 
-    (sc as any)._onFragLoaded({
-      frag: { url: 'seg1.ts', sn: 0, level: 0, duration: 10, start: 0 },
-      stats: { loaded: 500000, total: 500000, trequest: 0, tfirst: 1, tload: 100 },
+    (sc as unknown as { _onFragLoaded: (data: any) => void })._onFragLoaded({
+      frag: { url: 'seg1.ts', sn: 0, level: 0, duration: 10, start: 0 } as any,
+      stats: { loaded: 500000, total: 500000, trequest: 0, tfirst: 1, tload: 100 } as any,
     });
 
     sc.destroy();
