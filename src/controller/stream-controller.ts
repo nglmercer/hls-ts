@@ -43,9 +43,13 @@ export class StreamController {
 
   _onMediaAttached = (data: { media: HTMLMediaElement }): void => {
     this._media = data.media;
+    this._media.addEventListener('timeupdate', this._onTimeUpdate);
   };
 
   _onMediaDetached = (): void => {
+    if (this._media) {
+      this._media.removeEventListener('timeupdate', this._onTimeUpdate);
+    }
     this._media = null;
   };
 
@@ -58,29 +62,40 @@ export class StreamController {
   };
 
   _onLevelUpdated = (data: { level: Level; details: LevelDetails }): void => {
+    const fragments = data.details.fragments;
+    if (fragments.length === 0) return;
+
     if (this._currentFrag) {
-      // Find fragments that come after the currently loaded fragment
-      this._fragQueue = data.details.fragments.filter((f) => f.sn > this._currentFrag!.sn);
+      // When switching levels, find the fragment at the same TIME POSITION as the last loaded one.
+      // Using sn comparison is WRONG because each level has its own numbering scheme.
+      const nextStartTime = this._currentFrag.start + this._currentFrag.duration;
+      const startFrag = this._findFragmentByPTS(nextStartTime, fragments)
+        ?? this._findFragmentByPTS(this._currentFrag.start, fragments);
+
+      if (startFrag) {
+        this._fragQueue = fragments.filter(f => f.sn >= startFrag.sn);
+      } else {
+        this._fragQueue = [...fragments];
+      }
     } else {
-      // Start from live edge or beginning depending on config
       if (data.details.live) {
         const liveSyncCount = this.hls.config.liveSyncDurationCount;
-        const startIndex = Math.max(0, data.details.fragments.length - liveSyncCount);
-        this._fragQueue = data.details.fragments.slice(startIndex);
+        const startIndex = Math.max(0, fragments.length - liveSyncCount);
+        this._fragQueue = fragments.slice(startIndex);
       } else {
-        this._fragQueue = [...data.details.fragments];
+        this._fragQueue = [...fragments];
       }
     }
     this._loadNextFragment();
   };
 
+
   _onFragLoaded = async (data: { frag: Fragment; stats: { loaded: number; total: number; trequest: number; tfirst: number; tload: number } }) => {
     const { frag, stats } = data;
-    this._loading = false;
-
     const responseData = this._pendingData;
     this._pendingData = null;
     if (!responseData) {
+      this._loading = false;
       this._loadNextFragment();
       return;
     }
@@ -95,8 +110,12 @@ export class StreamController {
       }
     }
 
-    await this._processFragment(responseData, frag);
-    this._loadNextFragment();
+    try {
+      await this._processFragment(responseData, frag);
+    } finally {
+      this._loading = false;
+      this._loadNextFragment();
+    }
   }
 
   private _startLoading(): void {
@@ -139,6 +158,12 @@ export class StreamController {
     this._loadNextFragment();
   };
 
+  _onTimeUpdate = (): void => {
+    if (this._paused || this._loading || this._seeking) return;
+    this._loadNextFragment();
+  };
+
+
   private _findFragmentByPTS(time: number, fragments: Fragment[]): Fragment | null {
     if (fragments.length === 0) return null;
     let lo = 0;
@@ -166,44 +191,37 @@ export class StreamController {
       this._checkBufferTimer = null;
     }
 
+    const maxBuffer = this.hls.config.maxBufferLength;
+
     if (this._media) {
       const currentTime = this._media.currentTime;
-      let bufferedEnd = 0;
-      const buffered = this._media.buffered;
-      
-      // Calculate continuous buffer end, bridging small gaps (up to 1.0s)
-      for (let i = 0; i < buffered.length; i++) {
-        if (currentTime >= buffered.start(i) && currentTime <= buffered.end(i)) {
-          bufferedEnd = buffered.end(i);
-          let j = i + 1;
-          while (j < buffered.length && buffered.start(j) - bufferedEnd <= 1.0) {
-            bufferedEnd = buffered.end(j);
-            j++;
-          }
-          break;
+
+      // PRIMARY CHECK: Use the last loaded fragment's end time.
+      // This is synchronous and NOT subject to the appendBuffer race condition.
+      // It tells us how far ahead we've downloaded, regardless of whether
+      // the browser has finished appending.
+      if (this._currentFrag) {
+        const loadedAhead = (this._currentFrag.start + this._currentFrag.duration) - currentTime;
+        if (loadedAhead >= maxBuffer) {
+          this._checkBufferTimer = setTimeout(() => this._loadNextFragment(), 1000);
+          return;
         }
       }
-      
-      // If we are not in any range, use the furthest buffered data
-      if (bufferedEnd === 0 && buffered.length > 0) {
-        bufferedEnd = buffered.end(buffered.length - 1);
-      }
 
-      // To absolutely prevent QuotaExceededError on heavily fragmented buffers, 
-      // cap the buffer length by the furthest data point we have downloaded.
-      let furthestEnd = bufferedEnd;
+      // SECONDARY CHECK: Also verify via media.buffered (catches edge cases
+      // where _currentFrag was reset, e.g. after seek).
+      const buffered = this._media.buffered;
       if (buffered.length > 0) {
-        furthestEnd = Math.max(furthestEnd, buffered.end(buffered.length - 1));
-      }
-
-      const bufferLen = Math.max(0, furthestEnd - currentTime);
-      // Wait if we have buffered more than the max limit
-      if (bufferLen >= this.hls.config.maxBufferLength) {
-        this._checkBufferTimer = setTimeout(() => this._loadNextFragment(), 1000);
-        return;
+        const furthestEnd = buffered.end(buffered.length - 1);
+        const bufferLen = Math.max(0, furthestEnd - currentTime);
+        if (bufferLen >= maxBuffer) {
+          this._checkBufferTimer = setTimeout(() => this._loadNextFragment(), 1000);
+          return;
+        }
       }
     }
 
+    console.log('Queue size', this._fragQueue.length);
     this._loading = true;
     this._doLoad();
   }

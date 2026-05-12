@@ -99,7 +99,11 @@ export class BufferController {
         this._codecs = this._pendingCodecs;
         this._pendingCodecs = null;
       }
-      this._createSourceBuffer();
+      
+      // Only create if we actually have codecs, otherwise wait for _onBufferCodecs
+      if (this._codecs.videoCodec || this._codecs.audioCodec) {
+        this._createSourceBuffer();
+      }
     };
 
     ms.addEventListener('sourceopen', onSourceOpen);
@@ -226,22 +230,39 @@ export class BufferController {
       return;
     }
 
-    const evictEnd = Math.max(0, currentTime - 30);
+    // Strategy 1: Evict data behind the playhead (keep only 5s behind)
+    const evictEnd = Math.max(0, currentTime - 5);
     const evictStart = buffered.start(0);
 
-    if (evictEnd <= evictStart) {
-      console.warn('[BufferController] No evictable range, dropping data');
-      this._retryData = null;
-      return;
+    if (evictEnd > evictStart + 0.5) {
+      console.log(`[BufferController] Evicting behind playhead: ${evictStart.toFixed(1)}s - ${evictEnd.toFixed(1)}s`);
+      this._evicting = true;
+      try {
+        this._sourceBuffer.remove(evictStart, evictEnd);
+        return; // updateend will retry the append via _processQueue
+      } catch {
+        this._evicting = false;
+      }
     }
 
-    this._evicting = true;
-    try {
-      this._sourceBuffer.remove(evictStart, evictEnd);
-    } catch {
-      this._evicting = false;
-      this._retryData = null;
+    // Strategy 2: Evict data far ahead of the playhead (keep only 60s ahead)
+    const maxKeepAhead = 60;
+    const lastEnd = buffered.end(buffered.length - 1);
+    if (lastEnd > currentTime + maxKeepAhead + 10) {
+      const farStart = currentTime + maxKeepAhead;
+      console.log(`[BufferController] Evicting far-ahead data: ${farStart.toFixed(1)}s - ${lastEnd.toFixed(1)}s`);
+      this._evicting = true;
+      try {
+        this._sourceBuffer.remove(farStart, lastEnd);
+        return;
+      } catch {
+        this._evicting = false;
+      }
     }
+
+    // Nothing could be evicted — drop the pending data to avoid infinite loop
+    console.warn('[BufferController] No evictable range, dropping data');
+    this._retryData = null;
   }
 
   private _parseCodecs(level: Level): CodecInfo {

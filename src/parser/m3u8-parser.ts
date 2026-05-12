@@ -10,13 +10,14 @@ interface PlaylistParseResult {
   fragments: Array<{
     sn: number;
     duration: number;
+    start: number;
     url: string;
     byteRangeStart: number;
     byteRangeEnd: number;
     programDateTime: number;
     tagList: string[][];
   }>;
-  targetduration: number;
+  targetDuration: number;
   version: number;
   startSN: number;
   endSN: number;
@@ -95,7 +96,7 @@ export function parseMasterPlaylist(data: string, baseurl: string): ParseResult 
 export function parseMediaPlaylist(data: string, baseurl: string): PlaylistParseResult {
   const fragments: PlaylistParseResult['fragments'] = [];
   const lines = data.split('\n');
-  let targetduration = 0;
+  let targetDuration = 0;
   let version = 1;
   let startSN = 0;
   let endSN = 0;
@@ -109,12 +110,14 @@ export function parseMediaPlaylist(data: string, baseurl: string): PlaylistParse
   let isEndlist = false;
   let tagList: string[][] = [];
   let sn = 0;
+  let startTime = 0;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!.trim();
+    if (!line) continue;
 
     if (line.startsWith('#EXT-X-TARGETDURATION:')) {
-      targetduration = parseInt(line.substring('#EXT-X-TARGETDURATION:'.length));
+      targetDuration = parseInt(line.substring('#EXT-X-TARGETDURATION:'.length));
     } else if (line.startsWith('#EXT-X-VERSION:')) {
       version = parseInt(line.substring('#EXT-X-VERSION:'.length));
     } else if (line.startsWith('#EXT-X-MEDIA-SEQUENCE:')) {
@@ -149,6 +152,7 @@ export function parseMediaPlaylist(data: string, baseurl: string): PlaylistParse
       const url = resolveUrl(line, baseurl);
       fragments.push({
         sn,
+        start: startTime,
         duration: currentDuration,
         url,
         byteRangeStart: byteStart,
@@ -156,6 +160,7 @@ export function parseMediaPlaylist(data: string, baseurl: string): PlaylistParse
         programDateTime: currentProgramDateTime,
         tagList: [...tagList],
       });
+      startTime += currentDuration;
       sn++;
       currentDuration = 0;
       currentTitle = '';
@@ -168,7 +173,7 @@ export function parseMediaPlaylist(data: string, baseurl: string): PlaylistParse
   endSN = sn - 1;
   live = !isEndlist;
 
-  return { fragments, targetduration, version, startSN, endSN, live, type, initSegment };
+  return { fragments, targetDuration, version, startSN, endSN, live, type, initSegment };
 }
 
 function parseAttributes(data: string): Record<string, string> {
