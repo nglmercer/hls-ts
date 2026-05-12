@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>hls-ts Demo Player</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, system-ui, sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 16px;
+    }
+
+    h1 span {
+      color: #58a6ff;
+    }
+
+    .player-wrapper {
+      position: relative;
+      width: 100%;
+      background: #000;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    video {
+      width: 100%;
+      display: block;
+      max-height: 540px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 12px 0;
+      align-items: center;
+    }
+
+    select,
+    button {
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid #30363d;
+      background: #21262d;
+      color: #c9d1d9;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #30363d;
+    }
+
+    button:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      min-width: 200px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid #30363d;
+      background: #0d1117;
+      color: #c9d1d9;
+      font-size: 14px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 8px;
+      margin: 12px 0;
+    }
+
+    .stat-card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 10px;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: #8b949e;
+      text-transform: uppercase;
+    }
+
+    .stat-value {
+      font-size: 18px;
+      font-weight: 600;
+      margin-top: 2px;
+    }
+
+    .log {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 10px;
+      margin-top: 12px;
+      max-height: 200px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 12px;
+    }
+
+    .log-entry {
+      padding: 2px 0;
+      border-bottom: 1px solid #21262d;
+    }
+
+    .log-error {
+      color: #f85149;
+    }
+
+    .log-warn {
+      color: #d29922;
+    }
+
+    .log-info {
+      color: #58a6ff;
+    }
+
+    .url-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h1>hls-ts <span>Streaming Demo</span></h1>
+
+    <div class="url-bar">
+      <input type="text" id="streamUrl" value="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
+        placeholder="Enter HLS URL...">
+      <button id="loadBtn">Load</button>
+    </div>
+
+    <div class="controls">
+      <select id="presetSelect">
+        <option value="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8">Big Buck Bunny (VOD, 720p)</option>
+        <option value="https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8">Sintel (VOD, multi-res)</option>
+        <option value="https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8">Live Stream 1</option>
+      </select>
+      <button id="playBtn" disabled>▶ Play</button>
+      <button id="pauseBtn" disabled>⏸ Pause</button>
+      <span id="statusText" style="font-size:13px;color:#8b949e;">Ready</span>
+    </div>
+
+    <div class="player-wrapper">
+      <video id="video" muted controls></video>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">State</div>
+        <div class="stat-value" id="statState">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Bandwidth (est.)</div>
+        <div class="stat-value" id="statBw">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Resolution</div>
+        <div class="stat-value" id="statRes">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Buffered</div>
+        <div class="stat-value" id="statBuf">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Current Time</div>
+        <div class="stat-value" id="statTime">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Levels</div>
+        <div class="stat-value" id="statLevels">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Levels Cap</div>
+        <div class="stat-value" id="statCap">-</div>
+      </div>
+    </div>
+
+    <div class="log" id="logContainer"></div>
+  </div>
+
+  <script src="./demo.js"></script>
+</body>
+
+</html>
