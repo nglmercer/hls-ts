@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll } from 'bun:test';
 import { Hls } from '../src/core/Hls';
 import { Events } from '../src/types/events';
-import { LevelController, StreamController } from '../src/controller/stream-controller';
+import { LevelController } from '../src/controller/level-controller';
+import { StreamController } from '../src/controller/stream-controller';
 import { AbrController } from '../src/controller/abr-controller';
 
 describe('LevelController', () => {

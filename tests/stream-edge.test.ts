@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test';
-import { LevelController, StreamController } from '../src/controller/stream-controller';
+import { LevelController } from '../src/controller/level-controller';
+import { StreamController } from '../src/controller/stream-controller';
 import { AbrController } from '../src/controller/abr-controller';
 import { Hls } from '../src/core/Hls';
 

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { Hls } from '../src/core/Hls';
-import { LevelController, StreamController } from '../src/controller/stream-controller';
+import { LevelController } from '../src/controller/level-controller';
+import { StreamController } from '../src/controller/stream-controller';
 import { AbrController } from '../src/controller/abr-controller';
 import { Events, ErrorTypes, type HlsError } from '../src/types';
 
