@@ -14,8 +14,13 @@ export class TransmuxerController {
 
   private _initWorker() {
     try {
-      const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+      const origin = (typeof window !== 'undefined' && window.location && window.location.origin) 
+        ? window.location.origin 
+        : 'http://localhost';
       const workerUrl = new URL('/transmuxer-worker.js', origin);
+      if (typeof Worker === 'undefined') {
+        throw new Error('Worker not supported');
+      }
       this._worker = new Worker(workerUrl, { type: 'module' });
       this._worker.onmessage = (e: MessageEvent<TransmuxerResponse>) => {
         const response = e.data;

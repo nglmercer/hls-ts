@@ -100,7 +100,13 @@ describe('StreamController', () => {
     const lc = new LevelController(hls, abr);
     const sc = new StreamController(hls, lc, abr);
 
-    (sc as unknown as { _onMediaAttached: (data: any) => void })._onMediaAttached({ media: { currentTime: 0 } });
+    (sc as unknown as { _onMediaAttached: (data: any) => void })._onMediaAttached({ 
+      media: { 
+        currentTime: 0,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      } 
+    });
     (sc as unknown as { _onMediaDetached: () => void })._onMediaDetached();
     sc.destroy();
   });

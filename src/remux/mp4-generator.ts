@@ -464,7 +464,7 @@ export function initSegment(tracks: MP4Track[]): Uint8Array {
   return result;
 }
 
-export function fragmentBox(track: MP4Track, samples: MP4Sample[], baseDts: number, sequenceNumber: number): { moof: Uint8Array; mdat: Uint8Array } {
+export function fragmentBox(track: MP4Track, samples: MP4Sample[], baseDts: number, sequenceNumber?: number): { moof: Uint8Array; mdat: Uint8Array } {
 
   const trafBoxes: Uint8Array[] = [
     tfhd(track),
@@ -475,7 +475,7 @@ export function fragmentBox(track: MP4Track, samples: MP4Sample[], baseDts: numb
   trafBoxes.push(trunBox);
 
   const moof = box(t('moof'),
-    box(t('mfhd'), w8(0), zeros(3), w32(sequenceNumber)),
+    box(t('mfhd'), w8(0), zeros(3), w32(sequenceNumber ?? 0)),
     box(t('traf'), ...trafBoxes),
   );
 
@@ -498,7 +498,7 @@ export function fragmentBox(track: MP4Track, samples: MP4Sample[], baseDts: numb
   const dv = new DataView(moof.buffer, moof.byteOffset, moof.byteLength);
   for (let i = 8; i < moof.byteLength - 8; i++) {
     if (moof[i] === trunType[0] && moof[i + 1] === trunType[1] &&
-        moof[i + 2] === trunType[2] && moof[i + 3] === trunType[3]) {
+      moof[i + 2] === trunType[2] && moof[i + 3] === trunType[3]) {
       // Found trun box type at offset i (within the box, after the size field)
       // trun layout after type: version (1) + flags (3) + sample_count (4) + data_offset (4)
       const dataOffsetFieldPos = i + 12; // skip 'trun' type(4) + version(1) + flags(3) + sample_count(4)

@@ -8,7 +8,11 @@ describe('Hls Integration', () => {
     const hls = new Hls();
     let eventData: { media: HTMLVideoElement } | null = null;
     hls.on(Events.MEDIA_ATTACHED, (data: { media: HTMLVideoElement }) => { eventData = data; });
-    const video = { src: '' } as unknown as HTMLVideoElement;
+    const video = { 
+      src: '',
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    } as unknown as HTMLVideoElement;
     hls.attachMedia(video);
     expect(eventData).not.toBeNull();
     expect(eventData!.media).toBe(video);
@@ -33,7 +37,11 @@ describe('Hls Integration', () => {
   it('should clear media and url on destroy', () => {
     const hls = new Hls();
     hls.loadSource('http://example.com/manifest.m3u8');
-    hls.attachMedia({} as unknown as HTMLVideoElement);
+    hls.attachMedia({ 
+      src: '',
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    } as unknown as HTMLVideoElement);
     hls.destroy();
     expect(hls.media).toBeNull();
     expect(hls.url).toBeNull();
