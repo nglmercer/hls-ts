@@ -93,10 +93,16 @@ export class Hls implements HlsEventEmitter {
 
   attachMedia(media: HTMLMediaElement): void {
     this._media = media;
+    media.addEventListener('seeking', this._onMediaSeeking);
+    media.addEventListener('seeked', this._onMediaSeeked);
     this.trigger(Events.MEDIA_ATTACHED, { media });
   }
 
   detachMedia(): void {
+    if (this._media) {
+      this._media.removeEventListener('seeking', this._onMediaSeeking);
+      this._media.removeEventListener('seeked', this._onMediaSeeked);
+    }
     this.trigger(Events.MEDIA_DETACHED, {});
     this._media = null;
   }
@@ -119,6 +125,53 @@ export class Hls implements HlsEventEmitter {
 
   get levels(): Level[] {
     return this.levelController.levels;
+  }
+
+  get currentLevel(): number {
+    return this.levelController.currentLevel?.id ?? -1;
+  }
+
+  set currentLevel(newLevel: number) {
+    this.levelController.loadLevel(newLevel);
+  }
+
+  get nextLevel(): number {
+    return this.currentLevel; // Simplified fallback
+  }
+
+  set nextLevel(newLevel: number) {
+    this.levelController.loadLevel(newLevel);
+  }
+
+  get audioTrack(): number {
+    return -1; // Placeholder for now
+  }
+
+  set audioTrack(trackId: number) {
+    // Placeholder
+  }
+
+  get bandwidthEstimate(): number {
+    return this.abrController.bwEstimate;
+  }
+
+  get liveSyncPosition(): number {
+    return this.media?.currentTime ?? 0;
+  }
+
+  startLoad(startPosition: number = -1): void {
+    if (startPosition !== -1) {
+      this.config.startPosition = startPosition;
+    }
+    this.trigger(Events.MANIFEST_LOADING, { url: this._url });
+  }
+
+  stopLoad(): void {
+    // Basic stop logic
+  }
+
+  recoverMediaError(): void {
+    this.errorController.recoverMediaError();
   }
 
   on(event: string, handler: (...args: any[]) => void): void {
@@ -149,6 +202,14 @@ export class Hls implements HlsEventEmitter {
     return this._emitter.listeners(event);
   }
 
+  private _onMediaSeeking = (): void => {
+    this.trigger(Events.MEDIA_SEEKING);
+  };
+
+  private _onMediaSeeked = (): void => {
+    this.trigger(Events.MEDIA_SEEKED);
+  };
+
   private _wireControllers(): void {
     const bc = this.bufferController as any;
     const lc = this.levelController as any;
@@ -171,6 +232,8 @@ export class Hls implements HlsEventEmitter {
 
     this.on(Events.MEDIA_ATTACHED, sc._onMediaAttached);
     this.on(Events.MEDIA_DETACHED, sc._onMediaDetached);
+    this.on(Events.MEDIA_SEEKING, sc._onSeeking);
+    this.on(Events.MEDIA_SEEKED, sc._onSeeked);
     this.on(Events.BUFFER_RESET, sc._onBufferReset);
     this.on(Events.MANIFEST_PARSED, sc._onManifestParsed);
     this.on(Events.LEVEL_UPDATED, sc._onLevelUpdated);

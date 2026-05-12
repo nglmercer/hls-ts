@@ -130,6 +130,7 @@ export class BufferController {
     try {
       if (MediaSource.isTypeSupported(mime)) {
         this._sourceBuffer = this._mediaSource.addSourceBuffer(mime);
+        this._sourceBuffer.mode = 'sequence';
         this._sourceBufferReady = true;
         this._sourceBuffer.addEventListener('updateend', () => {
           this._appending = false;

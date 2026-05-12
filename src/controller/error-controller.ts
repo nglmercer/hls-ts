@@ -20,7 +20,25 @@ export class ErrorController {
   }
 
   destroy(): void {
+    this.clearRecoveryStates();
+  }
+
+  clearRecoveryStates(): void {
     this._recoveryStates.clear();
+  }
+
+  recoverMediaError(): void {
+    const error: HlsError = {
+      type: ErrorTypes.MEDIA_ERROR,
+      details: 'mediaErrorRecovered' as any,
+      fatal: true,
+      reason: 'Manual recovery requested',
+    };
+    this._handleMediaError(error, { retryCount: 0, lastErrorTime: 0, backoffMs: 0 });
+  }
+
+  resetMediaSwapCount(): void {
+    this._mediaSwapCount = 0;
   }
 
   private _onError = (error: HlsError): void => {
@@ -39,6 +57,9 @@ export class ErrorController {
       case ErrorTypes.MUX_ERROR:
         this._handleMuxError(error, state);
         break;
+      case ErrorTypes.KEY_SYSTEM_ERROR:
+        // Optional key system error handling
+        break;
       default:
         break;
     }
@@ -55,7 +76,13 @@ export class ErrorController {
     const frag = error.frag;
     if (frag?.url) {
       setTimeout(() => {
-        this.hls.trigger(Events.LEVEL_LOADING, { url: this.hls.url });
+        // Trigger frag loading directly or level loading depending on the actual error.
+        // For fragment errors, load the fragment URL.
+        if (error.details === 'fragLoadError' || error.details === 'fragLoadTimeout') {
+          this.hls.trigger(Events.FRAG_LOADING, { frag });
+        } else {
+          this.hls.trigger(Events.LEVEL_LOADING, { url: frag.level ? this.hls.levels[frag.level]?.url : this.hls.url });
+        }
       }, state.backoffMs);
     }
   }

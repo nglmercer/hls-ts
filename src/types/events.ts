@@ -1,6 +1,8 @@
 export const Events = {
   MEDIA_ATTACHED: 'mediaAttached',
   MEDIA_DETACHED: 'mediaDetached',
+  MEDIA_SEEKING: 'mediaSeeking',
+  MEDIA_SEEKED: 'mediaSeeked',
   BUFFER_RESET: 'bufferReset',
   BUFFER_CODECS: 'bufferCodecs',
   BUFFER_APPENDING: 'bufferAppending',

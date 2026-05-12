@@ -43,6 +43,8 @@ export interface HlsConfig {
   playlistLoadPolicy: LoadPolicyConfig;
   fragLoadPolicy: LoadPolicyConfig;
   abrController: AbrConfig;
+  startPosition: number;
+  autoStartLoad: boolean;
 }
 
 export const defaultConfig: HlsConfig = {
@@ -82,4 +84,6 @@ export const defaultConfig: HlsConfig = {
     abrBandWidthUpFactor: 0.7,
     abrMaxWithRealBitrate: false,
   },
+  startPosition: -1,
+  autoStartLoad: true,
 };

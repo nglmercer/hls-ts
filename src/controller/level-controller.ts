@@ -13,6 +13,7 @@ export class LevelController {
   private _currentLevel: Level | null = null;
   private _playlistLoader: PlaylistLoader;
   private _abrController: AbrController;
+  private _livePollInterval: any = null;
 
   constructor(hls: Hls, abrController: AbrController) {
     this.hls = hls;
@@ -33,7 +34,37 @@ export class LevelController {
     if (level) this._loadLevel(level);
   }
 
-  destroy(): void {}
+  destroy(): void {
+    if (this._livePollInterval) {
+      clearInterval(this._livePollInterval);
+      this._livePollInterval = null;
+    }
+  }
+
+  _startLivePolling(targetDuration: number): void {
+    const interval = Math.max(targetDuration / 2, 0.5) * 1000;
+    this._livePollInterval = setInterval(() => {
+      if (this._currentLevel) {
+        // avoid triggering LEVEL_LOADING for live updates to reduce log spam
+        const baseurl = this._currentLevel.url.substring(0, this._currentLevel.url.lastIndexOf('/') + 1);
+        this._playlistLoader.load(
+          { url: this._currentLevel.url },
+          {
+            onSuccess: (response) => {
+              const result = parseMediaPlaylist(response.data, baseurl);
+              this.hls.trigger(Events.LEVEL_LOADED, {
+                url: this._currentLevel!.url,
+                data: response.data,
+                ...result,
+              });
+            },
+            onError: () => {}, // silent retry on interval
+            onTimeout: () => {},
+          }
+        );
+      }
+    }, interval);
+  }
 
   _onManifestParsed = (data: ManifestData): void => {
     this._levels = data.levels.map((l: LevelParsed, i: number) => ({
@@ -96,6 +127,13 @@ export class LevelController {
       advanced: false,
       availabilityDelay: 0,
     };
+
+    if (data.live && !this._livePollInterval) {
+      this._startLivePolling(data.targetduration);
+    } else if (!data.live && this._livePollInterval) {
+      clearInterval(this._livePollInterval);
+      this._livePollInterval = null;
+    }
 
     this.hls.trigger(Events.LEVEL_UPDATED, { level, details: level.details });
   };

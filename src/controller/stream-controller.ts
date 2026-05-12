@@ -19,6 +19,7 @@ export class StreamController {
   private _fragQueue: Fragment[] = [];
   private _loading: boolean = false;
   private _paused: boolean = false;
+  private _seeking: boolean = false;
   private _pendingData: ArrayBuffer | null = null;
   private _lastCC: Map<number, number> = new Map();
 
@@ -51,7 +52,19 @@ export class StreamController {
   };
 
   _onLevelUpdated = (data: { level: Level; details: LevelDetails }): void => {
-    this._fragQueue = [...data.details.fragments];
+    if (this._currentFrag) {
+      // Find fragments that come after the currently loaded fragment
+      this._fragQueue = data.details.fragments.filter((f) => f.sn > this._currentFrag!.sn);
+    } else {
+      // Start from live edge or beginning depending on config
+      if (data.details.live) {
+        const liveSyncCount = this.hls.config.liveSyncDurationCount;
+        const startIndex = Math.max(0, data.details.fragments.length - liveSyncCount);
+        this._fragQueue = data.details.fragments.slice(startIndex);
+      } else {
+        this._fragQueue = [...data.details.fragments];
+      }
+    }
     this._loadNextFragment();
   };
 
@@ -85,15 +98,60 @@ export class StreamController {
     this._loadNextFragment();
   }
 
-  private _loadNextFragment(): void {
-    if (this._paused || this._loading) {
-      if (this._fragQueue.length > 0 && !this._loading) {
-        this._loading = true;
-        this._doLoad();
-      }
+  _onSeeking = (): void => {
+    this._seeking = true;
+    this._fragQueue = [];
+    this._fragmentLoader.abort();
+    this._transmuxer.reset();
+
+    const targetTime = this._media?.currentTime ?? 0;
+    if (targetTime > 1) {
+      this.hls.trigger(Events.BUFFER_FLUSHING, { startOffset: 0, endOffset: Math.max(0, targetTime - 1) });
+    }
+  };
+
+  _onSeeked = (): void => {
+    if (!this._media) {
+      this._seeking = false;
       return;
     }
 
+    const targetTime = this._media.currentTime;
+    const level = this._levelController.currentLevel;
+    if (!level?.details) {
+      this._seeking = false;
+      return;
+    }
+
+    const frag = this._findFragmentByPTS(targetTime, level.details.fragments);
+    if (frag) {
+      this._fragQueue = [frag];
+    }
+
+    this._seeking = false;
+    this._loadNextFragment();
+  };
+
+  private _findFragmentByPTS(time: number, fragments: Fragment[]): Fragment | null {
+    if (fragments.length === 0) return null;
+    let lo = 0;
+    let hi = fragments.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const f = fragments[mid];
+      if (time < f.start) {
+        hi = mid - 1;
+      } else if (time > f.start + f.duration) {
+        lo = mid + 1;
+      } else {
+        return f;
+      }
+    }
+    return fragments[Math.min(lo, fragments.length - 1)] ?? null;
+  }
+
+  private _loadNextFragment(): void {
+    if (this._paused || this._loading || this._seeking) return;
     if (this._fragQueue.length === 0) return;
     this._loading = true;
     this._doLoad();
@@ -110,7 +168,7 @@ export class StreamController {
     this.hls.trigger(Events.FRAG_LOADING, { frag });
 
     this._fragmentLoader.load(
-      { url: frag.url, frag },
+      { url: frag.url, frag, headers: frag.byteRangeEnd > 0 ? { 'Range': `bytes=${frag.byteRangeStart}-${frag.byteRangeEnd - 1}` } : undefined },
       {
         onSuccess: (response) => {
           this._pendingData = response.data;
