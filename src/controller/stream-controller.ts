@@ -93,7 +93,6 @@ export class StreamController {
     } else {
       if (data.details.live) {
         if (isLL && data.details.partHoldBack) {
-          // LL-HLS: Start near the edge based on partHoldBack
           const targetTime = fragments[fragments.length - 1].start + fragments[fragments.length - 1].duration - data.details.partHoldBack;
           const startFrag = this._findFragmentByPTS(targetTime, fragments);
           if (startFrag) {
@@ -110,7 +109,17 @@ export class StreamController {
           this._fragQueue = fragments.slice(startIndex);
         }
       } else {
-        this._fragQueue = [...fragments];
+        if (this._media && this._media.buffered.length > 0) {
+          const bufferedEnd = this._media.buffered.end(this._media.buffered.length - 1);
+          const startFrag = this._findFragmentByPTS(bufferedEnd, fragments);
+          if (startFrag) {
+            this._fragQueue = fragments.filter(f => f.sn >= startFrag.sn);
+          } else {
+            this._fragQueue = [...fragments];
+          }
+        } else {
+          this._fragQueue = [...fragments];
+        }
       }
     }
     this._loadNextFragment();
@@ -127,7 +136,7 @@ export class StreamController {
       return;
     }
 
-    if (this._fragQueue.length > 0) {
+    if (this._fragQueue.length > 0 && !this._media?.paused) {
       const bw = this._abrController.bwEstimate;
       const nextLevelId = this._abrController.getNextLevel(bw);
       const currentLevel = this._levelController.currentLevel;
