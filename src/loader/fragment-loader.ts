@@ -1,6 +1,12 @@
 import { BackoffTypes, type BackoffType } from '../types';
 import type { Fragment, FragmentStats } from '../types/level';
 
+interface CacheEntry {
+  data: ArrayBuffer;
+  stats: FragmentStats;
+  lastAccess: number;
+}
+
 interface LoaderContext {
   url: string;
   frag: Fragment;
@@ -38,6 +44,10 @@ export class FragmentLoader {
   private _retryConfig: RetryConfig;
   private _timeoutMs: number;
   private _abortController: AbortController | null = null;
+  private static _cache: Map<string, CacheEntry> = new Map();
+  private static _cacheMaxSize = 50;
+  private _sessionRetryCount: number = 0;
+  private _sessionMaxRetries: number = 5;
 
   constructor(retryConfig?: RetryConfig, timeoutMs: number = 30000) {
     this._retryConfig = retryConfig || {
@@ -55,8 +65,41 @@ export class FragmentLoader {
   }
 
   load(context: LoaderContext, callbacks: LoaderCallbacks): void {
+    const cacheKey = context.url;
+    const cached = FragmentLoader._cache.get(cacheKey);
+    if (cached) {
+      cached.lastAccess = Date.now();
+      const stats = this._createStats();
+      stats.trequest = cached.stats.trequest;
+      stats.tfirst = cached.stats.tfirst;
+      stats.tload = performance.now();
+      stats.loaded = cached.data.byteLength;
+      stats.total = cached.data.byteLength;
+      this._stats = stats;
+      callbacks.onSuccess(
+        { url: context.url, data: cached.data, stats },
+        stats,
+        context,
+      );
+      return;
+    }
     this.abort();
     this._loadWithRetry(context, callbacks);
+  }
+
+  private _storeCache(url: string, data: ArrayBuffer, stats: FragmentStats): void {
+    if (FragmentLoader._cache.size >= FragmentLoader._cacheMaxSize) {
+      let oldestKey = '';
+      let oldestTime = Infinity;
+      for (const [key, entry] of FragmentLoader._cache) {
+        if (entry.lastAccess < oldestTime) {
+          oldestTime = entry.lastAccess;
+          oldestKey = key;
+        }
+      }
+      if (oldestKey) FragmentLoader._cache.delete(oldestKey);
+    }
+    FragmentLoader._cache.set(url, { data, stats, lastAccess: Date.now() });
   }
 
   abort(): void {
@@ -67,6 +110,10 @@ export class FragmentLoader {
   }
 
   private _loadWithRetry(context: LoaderContext, callbacks: LoaderCallbacks): void {
+    if (this._sessionRetryCount >= this._sessionMaxRetries) {
+      callbacks.onError({ code: 0, text: 'Max session retries exceeded' }, context);
+      return;
+    }
     this._stats = this._createStats();
     this._stats.loading = true;
     this._stats.trequest = performance.now();
@@ -100,6 +147,8 @@ export class FragmentLoader {
           this._stats.total = data.byteLength;
           this._stats.tload = performance.now();
           this._stats.loading = false;
+          this._storeCache(context.url, data, this._stats);
+          this._sessionRetryCount = 0;
           callbacks.onSuccess(
             { url: context.url, data, stats: this._stats },
             this._stats,
@@ -124,8 +173,11 @@ export class FragmentLoader {
               this._stats.total = totalLength;
               this._stats.tload = performance.now();
               this._stats.loading = false;
+              const resultData = combined.buffer as ArrayBuffer;
+              this._storeCache(context.url, resultData, this._stats);
+              this._sessionRetryCount = 0;
               callbacks.onSuccess(
-                { url: context.url, data: combined.buffer as ArrayBuffer, stats: this._stats },
+                { url: context.url, data: resultData, stats: this._stats },
                 this._stats,
                 context,
               );
@@ -152,9 +204,11 @@ export class FragmentLoader {
           }
         } else if (this._retryCount < this._retryConfig.maxNumRetry) {
           this._retryCount++;
+          this._sessionRetryCount++;
           const delay = this._getRetryDelay();
           setTimeout(() => this._loadWithRetry(context, callbacks), delay);
         } else {
+          this._sessionRetryCount++;
           callbacks.onError({ code: 0, text: err.message }, context);
         }
       });

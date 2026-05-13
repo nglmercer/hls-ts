@@ -32,6 +32,7 @@ export class TSDemuxer implements IDemuxer {
   private _ptsRollover: number = 0;
   private _lastPts: Map<number, number> = new Map();
   private _rolloverCounts: Map<number, number> = new Map();
+  private _maxRolloverCount: number = 0;
 
   constructor() {
     this._aacStream = new AacStream();

@@ -26,6 +26,7 @@ export class StreamController {
   private _pendingData: ArrayBuffer | null = null;
   private _lastCC: Map<number, number> = new Map();
   private _checkBufferTimer: ReturnType<typeof setTimeout> | null = null;
+  private _timeUpdateTimer: ReturnType<typeof setTimeout> | null = null;
   private logger = new Logger('StreamController');
 
   constructor(hls: Hls, levelController: LevelController, abrController: AbrController) {
@@ -40,6 +41,10 @@ export class StreamController {
     if (this._checkBufferTimer) {
       clearTimeout(this._checkBufferTimer);
       this._checkBufferTimer = null;
+    }
+    if (this._timeUpdateTimer) {
+      clearTimeout(this._timeUpdateTimer);
+      this._timeUpdateTimer = null;
     }
     this._transmuxer.destroy();
   }
@@ -205,11 +210,12 @@ export class StreamController {
     this.hls.trigger(Events.BUFFER_RESET);
     this._lastLevel = undefined;
 
-    this.hls.trigger(Events.BUFFER_FLUSHING, { startOffset: 0, endOffset: Infinity });
-
     // Start loading immediately at the seek position to break the Catch-22
     if (this._media) {
       const targetTime = this._media.currentTime;
+
+      // Only flush ahead of the seek target; preserve already-played buffer
+      this.hls.trigger(Events.BUFFER_FLUSHING, { startOffset: targetTime, endOffset: Infinity });
       const level = this._levelController.currentLevel;
       if (level?.details) {
         const frag = this._findFragmentByPTS(targetTime, level.details.fragments);
@@ -231,7 +237,11 @@ export class StreamController {
 
   _onTimeUpdate = (): void => {
     if (this._paused || this._seeking) return;
-    if (!this._loading) this._loadNextFragment();
+    if (this._timeUpdateTimer) return;
+    this._timeUpdateTimer = setTimeout(() => {
+      this._timeUpdateTimer = null;
+      if (!this._loading) this._loadNextFragment();
+    }, 200);
   };
 
   _onPlaying = (): void => {
@@ -429,6 +439,13 @@ onError: (err) => {
 
       if (this._lastLevel !== undefined && this._lastLevel !== level) {
         this._transmuxer.reset();
+        if (this._media && this._media.buffered.length > 0) {
+          const start = frag.start;
+          const end = this._media.buffered.end(this._media.buffered.length - 1);
+          if (end > start) {
+            this.hls.trigger(Events.BUFFER_FLUSHING, { startOffset: start, endOffset: end });
+          }
+        }
       }
       this._lastLevel = level;
 
