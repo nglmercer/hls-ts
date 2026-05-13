@@ -18,6 +18,16 @@ export interface PlaylistParseResult {
     programDateTime: number;
     tagList: string[][];
     initSegment: { url: string; byteRangeStart: number; byteRangeEnd: number } | null;
+    parts?: Array<{
+      sn: number;
+      part: number;
+      uri: string;
+      duration: number;
+      independent: boolean;
+      byteRangeStart?: number;
+      byteRangeEnd?: number;
+      gap?: boolean;
+    }>;
   }>;
   targetduration: number;
   version: number;
@@ -39,6 +49,16 @@ export interface PlaylistParseResult {
     endOnNext?: boolean;
     attributes: Record<string, string>;
   }>;
+  partTarget?: number;
+  partHoldBack?: number;
+  canBlockReload?: boolean;
+  canSkipUntil?: number;
+  preloadHint?: {
+    type: 'PART' | 'MAP';
+    uri: string;
+    byteRangeStart?: number;
+    byteRangeEnd?: number;
+  };
 }
 
 export function parseMasterPlaylist(data: string, baseurl: string): ParseResult {
@@ -111,6 +131,7 @@ export function parseMasterPlaylist(data: string, baseurl: string): ParseResult 
 export function parseMediaPlaylist(data: string, baseurl: string): PlaylistParseResult {
   const fragments: PlaylistParseResult['fragments'] = [];
   const dateranges: PlaylistParseResult['dateranges'] = [];
+  const parts: any[] = [];
   const lines = data.split('\n');
   let targetduration = 0;
   let version = 1;
@@ -127,6 +148,11 @@ export function parseMediaPlaylist(data: string, baseurl: string): PlaylistParse
   let tagList: string[][] = [];
   let sn = 0;
   let startTime = 0;
+  let partTarget = 0;
+  let partHoldBack = 0;
+  let canBlockReload = false;
+  let canSkipUntil = 0;
+  let preloadHint: any = null;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!.trim();
@@ -176,6 +202,7 @@ export function parseMediaPlaylist(data: string, baseurl: string): PlaylistParse
         programDateTime: currentProgramDateTime,
         tagList: [...tagList],
         initSegment: initSegment,
+        parts: parts.length > 0 ? [...parts] : undefined,
       });
       startTime += currentDuration;
       sn++;
@@ -184,6 +211,7 @@ export function parseMediaPlaylist(data: string, baseurl: string): PlaylistParse
       currentByteRange = '';
       currentProgramDateTime = 0;
       tagList = [];
+      parts.length = 0; // Clear parts for next fragment
     } else if (line.startsWith(HlsTags.EXT_X_DATERANGE)) {
       const attrString = line.substring(HlsTags.EXT_X_DATERANGE.length);
       const attrs = parseAttributes(attrString);
@@ -204,13 +232,61 @@ export function parseMediaPlaylist(data: string, baseurl: string): PlaylistParse
         else daterange.attributes![key] = value;
       }
       dateranges.push(daterange as DateRange);
+    } else if (line.startsWith(HlsTags.EXT_X_PART)) {
+      const attrs = parseAttributes(line.substring(HlsTags.EXT_X_PART.length));
+      const uri = resolveUrl(attrs['URI'] || '', baseurl);
+      const duration = parseFloat(attrs['DURATION'] || '0');
+      const independent = attrs['INDEPENDENT'] === 'YES';
+      const gap = attrs['GAP'] === 'YES';
+      const [byteStart, byteEnd] = parseByteRange(attrs['BYTERANGE'] || '');
+      
+      parts.push({
+        sn,
+        part: parts.length,
+        uri,
+        duration,
+        independent,
+        gap,
+        byteRangeStart: byteStart,
+        byteRangeEnd: byteEnd,
+      });
+    } else if (line.startsWith(HlsTags.EXT_X_PART_INF)) {
+      const attrs = parseAttributes(line.substring(HlsTags.EXT_X_PART_INF.length));
+      partTarget = parseFloat(attrs['PART-TARGET'] || '0');
+    } else if (line.startsWith(HlsTags.EXT_X_SERVER_CONTROL)) {
+      const attrs = parseAttributes(line.substring(HlsTags.EXT_X_SERVER_CONTROL.length));
+      canBlockReload = attrs['CAN-BLOCK-RELOAD'] === 'YES';
+      canSkipUntil = parseFloat(attrs['CAN-SKIP-UNTIL'] || '0');
+      partHoldBack = parseFloat(attrs['PART-HOLD-BACK'] || '0');
+    } else if (line.startsWith(HlsTags.EXT_X_PRELOAD_HINT)) {
+      const attrs = parseAttributes(line.substring(HlsTags.EXT_X_PRELOAD_HINT.length));
+      preloadHint = {
+        type: attrs['TYPE'] || 'PART',
+        uri: resolveUrl(attrs['URI'] || '', baseurl),
+        ...parseByteRange(attrs['BYTERANGE'] || ''),
+      };
     }
   }
 
   endSN = sn - 1;
   live = !isEndlist;
 
-  return { fragments, targetduration, version, startSN, endSN, live, type, initSegment, dateranges };
+  return { 
+    fragments, 
+    targetduration, 
+    version, 
+    startSN, 
+    endSN, 
+    live, 
+    type, 
+    initSegment, 
+    dateranges,
+    partTarget: partTarget || undefined,
+    partHoldBack: partHoldBack || undefined,
+    canBlockReload,
+    canSkipUntil: canSkipUntil || undefined,
+    preloadHint: preloadHint || undefined,
+  };
 }
 
 function parseAttributes(data: string): Record<string, string> {

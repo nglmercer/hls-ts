@@ -33,6 +33,7 @@ export const Events = {
   FRAG_PARSING_METADATA: 'fragParsingMetadata',
   DATERANGE_ENTERED: 'daterangeEntered',
   DATERANGE_EXITED: 'daterangeExited',
+  METADATA_FOUND: 'metadataFound',
   ERROR: 'hlsError',
   DESTROYING: 'hlsDestroying',
 } as const;

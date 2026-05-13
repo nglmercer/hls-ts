@@ -28,6 +28,25 @@ export interface DateRange {
   // Calculated fields
   startTimeline?: number;
   endTimeline?: number;
+  scte35Data?: any;
+}
+
+export interface Part {
+  sn: number;
+  part: number;
+  uri: string;
+  duration: number;
+  independent: boolean;
+  byteRangeStart?: number;
+  byteRangeEnd?: number;
+  gap?: boolean;
+}
+
+export interface PreloadHint {
+  type: 'PART' | 'MAP';
+  uri: string;
+  byteRangeStart?: number;
+  byteRangeEnd?: number;
 }
 export interface LevelDetails {
   version: number;
@@ -43,6 +62,11 @@ export interface LevelDetails {
   advanced: boolean;
   availabilityDelay: number;
   dateranges?: DateRange[];
+  partTarget?: number;
+  preloadHint?: PreloadHint;
+  canBlockReload?: boolean;
+  canSkipUntil?: number;
+  partHoldBack?: number;
 }
 
 export interface Fragment {
@@ -58,6 +82,7 @@ export interface Fragment {
   initSegment: { url: string; byteRangeStart: number; byteRangeEnd: number } | null;
   tagList: string[][];
   stats: FragmentStats;
+  parts?: Part[];
 }
 
 export interface FragmentStats {

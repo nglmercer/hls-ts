@@ -128,6 +128,11 @@ export class LevelController {
       advanced: false,
       availabilityDelay: 0,
       dateranges: data.dateranges,
+      partTarget: data.partTarget,
+      preloadHint: data.preloadHint,
+      canBlockReload: data.canBlockReload,
+      canSkipUntil: data.canSkipUntil,
+      partHoldBack: data.partHoldBack,
     };
 
     if (data.live && !this._livePollInterval) {

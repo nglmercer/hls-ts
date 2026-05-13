@@ -1,6 +1,6 @@
 import { Events } from '../types/events';
 import type { Hls } from '../core/Hls';
-import type { Level, Fragment, LevelDetails, ManifestData } from '../types/level';
+import type { Level, Fragment, LevelDetails, ManifestData, Part } from '../types/level';
 import { FragmentLoader } from '../loader/fragment-loader';
 import { TransmuxerController } from '../remux/transmuxer-controller';
 import { ErrorTypes, ErrorDetails, type HlsError, TrackTypes } from '../types';
@@ -15,15 +15,17 @@ export class StreamController {
   private _abrController: AbrController;
   private _fragmentLoader: FragmentLoader;
   private _transmuxer: TransmuxerController;
-  private _currentFrag: Fragment | null = null;
-  private _fragQueue: Fragment[] = [];
   private _loading: boolean = false;
+  private _currentFrag: Fragment | null = null;
+  private _currentPart: Part | null = null;
+  private _fragQueue: Fragment[] = [];
+  private _partQueue: Part[] = [];
   private _paused: boolean = false;
   private _seeking: boolean = false;
   private _lastLevel?: number;
   private _pendingData: ArrayBuffer | null = null;
   private _lastCC: Map<number, number> = new Map();
-  private _checkBufferTimer: ReturnType<typeof setInterval> | null = null;
+  private _checkBufferTimer: ReturnType<typeof setTimeout> | null = null;
   private logger = new Logger('StreamController');
 
   constructor(hls: Hls, levelController: LevelController, abrController: AbrController) {
@@ -70,23 +72,43 @@ export class StreamController {
     const fragments = data.details.fragments;
     if (fragments.length === 0) return;
 
+    const isLL = data.details.partTarget !== undefined;
+
     if (this._currentFrag) {
-      // When switching levels, find the fragment at the same TIME POSITION as the last loaded one.
-      // Using sn comparison is WRONG because each level has its own numbering scheme.
       const nextStartTime = this._currentFrag.start + this._currentFrag.duration;
       const startFrag = this._findFragmentByPTS(nextStartTime, fragments)
         ?? this._findFragmentByPTS(this._currentFrag.start, fragments);
 
       if (startFrag) {
         this._fragQueue = fragments.filter(f => f.sn >= startFrag.sn);
+
+        // If we were loading parts, update the part queue from the new fragment
+        if (isLL && startFrag.sn === this._currentFrag.sn && startFrag.parts) {
+          const lastPartIdx = this._currentPart ? this._currentPart.part : -1;
+          this._partQueue = startFrag.parts.filter(p => p.part > lastPartIdx);
+        }
       } else {
         this._fragQueue = [...fragments];
       }
     } else {
       if (data.details.live) {
-        const liveSyncCount = this.hls.config.liveSyncDurationCount;
-        const startIndex = Math.max(0, fragments.length - liveSyncCount);
-        this._fragQueue = fragments.slice(startIndex);
+        if (isLL && data.details.partHoldBack) {
+          // LL-HLS: Start near the edge based on partHoldBack
+          const targetTime = fragments[fragments.length - 1].start + fragments[fragments.length - 1].duration - data.details.partHoldBack;
+          const startFrag = this._findFragmentByPTS(targetTime, fragments);
+          if (startFrag) {
+            this._fragQueue = fragments.filter(f => f.sn >= startFrag.sn);
+            if (startFrag.parts) {
+              this._partQueue = startFrag.parts.filter(p => (startFrag.start + p.duration * (p.part + 1)) >= targetTime);
+            }
+          } else {
+            this._fragQueue = [fragments[fragments.length - 1]];
+          }
+        } else {
+          const liveSyncCount = this.hls.config.liveSyncDurationCount;
+          const startIndex = Math.max(0, fragments.length - liveSyncCount);
+          this._fragQueue = fragments.slice(startIndex);
+        }
       } else {
         this._fragQueue = [...fragments];
       }
@@ -95,7 +117,7 @@ export class StreamController {
   };
 
 
-  _onFragLoaded = async (data: { frag: Fragment; stats: { loaded: number; total: number; trequest: number; tfirst: number; tload: number } }) => {
+  _onFragLoaded = async (data: { frag: Fragment; part?: Part; stats: { loaded: number; total: number; trequest: number; tfirst: number; tload: number } }) => {
     const { frag, stats } = data;
     const responseData = this._pendingData;
     this._pendingData = null;
@@ -121,7 +143,7 @@ export class StreamController {
       this._loading = false;
       this._loadNextFragment();
     }
-  }
+  };
 
   _startLoading(): void {
     this._paused = false;
@@ -229,7 +251,7 @@ export class StreamController {
 
   private _loadNextFragment(): void {
     if (this._paused || this._loading) return;
-    if (this._fragQueue.length === 0) return;
+    if (this._fragQueue.length === 0 && this._partQueue.length === 0) return;
 
     if (this._checkBufferTimer) {
       clearTimeout(this._checkBufferTimer);
@@ -270,6 +292,41 @@ export class StreamController {
   }
 
   private _doLoad(): void {
+    if (this._partQueue.length > 0) {
+      const part = this._partQueue.shift()!;
+      this._currentPart = part;
+      const frag = this._currentFrag!;
+
+      this.logger.log(`Loading part SN:${part.sn} part:${part.part} uri:${part.uri}`);
+      this.hls.trigger(Events.FRAG_LOADING, { frag, part });
+
+      const headers: Record<string, string> = {};
+      if (part.byteRangeEnd && part.byteRangeEnd > 0) {
+        headers['Range'] = `bytes=${part.byteRangeStart}-${part.byteRangeEnd - 1}`;
+      }
+
+      this._fragmentLoader.load(
+        { url: part.uri, frag, headers },
+        {
+          onSuccess: (res) => {
+            this._pendingData = res.data;
+            this.hls.trigger(Events.FRAG_LOADED, { frag, part: this._currentPart, stats: res.stats });
+          },
+          onError: (err) => {
+            this._loading = false;
+            this.hls.trigger(Events.ERROR, { type: 'NETWORK_ERROR', details: err });
+            this._loadNextFragment();
+          },
+          onTimeout: () => {
+            this._loading = false;
+            this.hls.trigger(Events.ERROR, { type: 'NETWORK_ERROR', details: 'Timeout' });
+            this._loadNextFragment();
+          },
+        }
+      );
+      return;
+    }
+
     const frag = this._fragQueue.shift()!;
     if (!frag) {
       this._loading = false;
@@ -277,27 +334,35 @@ export class StreamController {
     }
 
     this._currentFrag = frag;
+    this._currentPart = null;
+
+    // If fragment has parts, load the first part instead of the full fragment
+    if (frag.parts && frag.parts.length > 0) {
+      this._partQueue = [...frag.parts];
+      this._doLoad();
+      return;
+    }
+
     this.logger.log(`Loading fragment SN:${frag.sn} level:${frag.level} start:${frag.start.toFixed(3)}s`);
     this.hls.trigger(Events.FRAG_LOADING, { frag });
 
+    const headers: Record<string, string> = {};
+    if (frag.byteRangeEnd && frag.byteRangeEnd > 0) {
+      headers['Range'] = `bytes=${frag.byteRangeStart}-${frag.byteRangeEnd - 1}`;
+    }
+
     this._fragmentLoader.load(
-      { url: frag.url, frag, headers: frag.byteRangeEnd > 0 ? { 'Range': `bytes=${frag.byteRangeStart}-${frag.byteRangeEnd - 1}` } : undefined },
+      { url: frag.url, frag, headers },
       {
-        onSuccess: (response) => {
-          this._pendingData = response.data;
-          this.hls.trigger(Events.FRAG_LOADED, { frag, stats: response.stats });
+        onSuccess: (res) => {
+          this._pendingData = res.data;
+          this.hls.trigger(Events.FRAG_LOADED, { frag, stats: res.stats });
         },
         onError: (err) => {
           this._loading = false;
-          const error: HlsError = {
-            type: ErrorTypes.NETWORK_ERROR,
-            details: ErrorDetails.FRAG_LOAD_ERROR,
-            fatal: true,
-            reason: err.text,
-            frag,
-          };
-          this.hls.trigger(Events.ERROR, error);
+          this.hls.trigger(Events.ERROR, { type: 'NETWORK_ERROR', details: err });
           this._loadNextFragment();
+
         },
         onTimeout: () => {
           this._loading = false;
