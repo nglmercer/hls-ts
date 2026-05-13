@@ -341,6 +341,10 @@ _startLoading(): void {
         this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.initSegment, type: TrackTypes.VIDEO });
       }
 
+      if (remuxResult.metadata) {
+        this.hls.trigger(Events.FRAG_PARSING_METADATA, { frag, samples: remuxResult.metadata });
+      }
+
       // Append combined media data (moof+mdat for each track, concatenated)
       if (remuxResult.data) {
         this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.data, type: TrackTypes.VIDEO });

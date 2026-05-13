@@ -20,6 +20,7 @@ const PID_PAT = 0x0000;
 export class TSDemuxer implements IDemuxer {
   private _videoTrack?: DemuxedVideoTrack;
   private _audioTrack?: DemuxedAudioTrack;
+  private _metadata: Array<{ pts: number; data: Uint8Array }> = [];
   private _aacStream: AacStream;
   private _avcStream: AvcStream;
   private _hevcStream: HevcStream;
@@ -54,6 +55,7 @@ export class TSDemuxer implements IDemuxer {
   demux(data: Uint8Array, timeOffset: number): DemuxResult {
     this._videoTrack = undefined;
     this._audioTrack = undefined;
+    this._metadata = [];
 
     let offset = 0;
     // Find first sync byte
@@ -76,6 +78,7 @@ export class TSDemuxer implements IDemuxer {
     return {
       videoTrack: this._videoTrack,
       audioTrack: this._audioTrack,
+      metadata: this._metadata.length > 0 ? this._metadata : undefined,
     };
   }
 
@@ -187,6 +190,8 @@ export class TSDemuxer implements IDemuxer {
         this._pids.set(elementaryPid, { type: TrackTypes.VIDEO, streamType });
       } else if (streamType === 0x0f || streamType === 0x11 || streamType === 0x03 || streamType === 0x04) {
         this._pids.set(elementaryPid, { type: TrackTypes.AUDIO, streamType });
+      } else if (streamType === 0x15) {
+        this._pids.set(elementaryPid, { type: TrackTypes.METADATA, streamType });
       }
 
       offset += 5 + esInfoLength; // Skip past ES_info descriptors
@@ -253,6 +258,15 @@ export class TSDemuxer implements IDemuxer {
       }
     } else if (pidInfo.type === TrackTypes.AUDIO) {
       this._aacStream.parse(esData, pts, dts, this);
+    } else if (pidInfo.type === TrackTypes.METADATA) {
+      this._processMetadata(esData, pts);
+    }
+  }
+
+  private _processMetadata(data: Uint8Array, pts: number): void {
+    // Basic ID3 detection
+    if (data.length >= 10 && data[0] === 0x49 && data[1] === 0x44 && data[2] === 0x33) {
+      this._metadata.push({ pts, data });
     }
   }
 

@@ -13,7 +13,22 @@ export interface Level {
   frameRate: number;
   details?: LevelDetails;
 }
-
+export interface DateRange {
+  id: string;
+  class?: string;
+  startDate: string;
+  endDate?: string;
+  duration?: number;
+  plannedDuration?: number;
+  scte35Cmd?: string;
+  scte35Out?: string;
+  scte35In?: string;
+  endOnNext?: boolean;
+  attributes: Record<string, string>;
+  // Calculated fields
+  startTimeline?: number;
+  endTimeline?: number;
+}
 export interface LevelDetails {
   version: number;
   targetduration: number;
@@ -27,6 +42,7 @@ export interface LevelDetails {
   updated: number;
   advanced: boolean;
   availabilityDelay: number;
+  dateranges?: DateRange[];
 }
 
 export interface Fragment {

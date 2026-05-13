@@ -15,6 +15,12 @@ export class ErrorController {
   private _mediaSwapCount: number = 0;
   private _maxMediaSwap: number = 3;
 
+  private static readonly MEDIA_RECOVERY_DELAY_MS = 100;
+  private static readonly MUX_ERROR_RECOVERY_DELAY_MS = 500;
+  private static readonly DEFAULT_RETRY_COUNT = 3;
+  private static readonly MAX_BACKOFF_MS = 15000;
+  private static readonly BASE_BACKOFF_MS = 1000;
+
   constructor(hls: Hls) {
     this.hls = hls;
   }
@@ -30,7 +36,7 @@ export class ErrorController {
   recoverMediaError(): void {
     const error: HlsError = {
       type: ErrorTypes.MEDIA_ERROR,
-      details: 'mediaErrorRecovered' as any,
+      details: ErrorDetails.MEDIA_ERROR_RECOVERED,
       fatal: true,
       reason: 'Manual recovery requested',
     };
@@ -66,7 +72,7 @@ export class ErrorController {
   };
 
   private _handleNetworkError(error: HlsError, state: RecoveryState, key: string): void {
-    const maxRetries = this.hls.config.fragLoadPolicy?.errorRetry?.maxNumRetry ?? 3;
+    const maxRetries = this.hls.config.fragLoadPolicy?.errorRetry?.maxNumRetry ?? ErrorController.DEFAULT_RETRY_COUNT;
     if (state.retryCount >= maxRetries) return;
 
     state.retryCount++;
@@ -78,7 +84,7 @@ export class ErrorController {
       setTimeout(() => {
         // Trigger frag loading directly or level loading depending on the actual error.
         // For fragment errors, load the fragment URL.
-        if (error.details === 'fragLoadError' || error.details === 'fragLoadTimeout') {
+        if (error.details === ErrorDetails.FRAG_LOAD_ERROR || error.details === ErrorDetails.FRAG_LOAD_TIMEOUT) {
           this.hls.trigger(Events.FRAG_LOADING, { frag });
         } else {
           this.hls.trigger(Events.LEVEL_LOADING, { url: frag.level ? this.hls.levels[frag.level]?.url : this.hls.url });
@@ -96,7 +102,7 @@ export class ErrorController {
       const wasPlaying = !media.paused;
       const currentTime = media.currentTime;
 
-      if (error.details === 'bufferAppendError') {
+      if (error.details === ErrorDetails.BUFFER_APPEND_ERROR) {
         this.hls.trigger(Events.BUFFER_RESET, {});
       }
 
@@ -105,7 +111,7 @@ export class ErrorController {
         this.hls.attachMedia(media);
         media.currentTime = currentTime;
         if (wasPlaying) media.play().catch(() => { });
-      }, 100);
+      }, ErrorController.MEDIA_RECOVERY_DELAY_MS);
     }
   }
 
@@ -121,11 +127,11 @@ export class ErrorController {
 
     setTimeout(() => {
       this.hls.trigger(Events.LEVEL_SWITCHING, { level: nextLevel });
-    }, 500);
+    }, ErrorController.MUX_ERROR_RECOVERY_DELAY_MS);
   }
 
   private _calculateBackoff(retryCount: number): number {
-    return Math.min(1000 * Math.pow(2, retryCount - 1), 15000);
+    return Math.min(ErrorController.BASE_BACKOFF_MS * Math.pow(2, retryCount - 1), ErrorController.MAX_BACKOFF_MS);
   }
 
   private _getOrCreateState(key: string): RecoveryState {

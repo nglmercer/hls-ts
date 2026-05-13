@@ -1,6 +1,7 @@
 export const TrackTypes = {
   VIDEO: 'video',
   AUDIO: 'audio',
+  METADATA: 'metadata',
 } as const;
 
 export type TrackType = (typeof TrackTypes)[keyof typeof TrackTypes];

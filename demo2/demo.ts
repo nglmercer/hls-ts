@@ -47,12 +47,12 @@ function formatDuration(seconds: number): string {
 }
 
 function updateStats() {
-   if (!hls) return;
-   statBw.textContent = formatBitrate(hls.abr?.bwEstimate ?? 0);
-   statCap.textContent = hls.autoLevelCapping >= 0 ? `Up to lvl ${hls.autoLevelCapping}` : "Auto";
-   statLevels.textContent = `${hls.levels?.length ?? 0} levels`;
-   if (video) statTime.textContent = formatDuration(video.currentTime);
- }
+  if (!hls) return;
+  statBw.textContent = formatBitrate(hls.abr?.bwEstimate ?? 0);
+  statCap.textContent = hls.autoLevelCapping >= 0 ? `Up to lvl ${hls.autoLevelCapping}` : "Auto";
+  statLevels.textContent = `${hls.levels?.length ?? 0} levels`;
+  if (video) statTime.textContent = formatDuration(video.currentTime);
+}
 
 function destroyHls() {
   if (hls) {
@@ -175,6 +175,27 @@ function loadSource(url: string) {
     appendLog("Hls instance destroyed");
   });
 
+  hls.on(Events.AUDIO_TRACK_SWITCHED, ({ id }: { id: number }) => {
+    audioTrackSelect.value = String(id);
+    appendLog(`Audio track switched to ${id}`, "log-info");
+  });
+
+  hls.on(Events.SUBTITLE_TRACK_SWITCH, ({ id }: { id: number }) => {
+    subtitleTrackSelect.value = String(id);
+    subtitleToggle.checked = id >= 0;
+    appendLog(`Subtitle track switched to ${id}`, "log-info");
+  });
+
+  hls.on(Events.AUDIO_TRACKS_UPDATED, () => {
+    populateTrackSelects();
+    appendLog(`Audio tracks updated: ${hls!.audioTracks.length}`, "log-info");
+  });
+
+  hls.on(Events.SUBTITLE_TRACKS_UPDATED, () => {
+    populateTrackSelects();
+    appendLog(`Subtitle tracks updated: ${hls!.subtitleTracks.length}`, "log-info");
+  });
+
   hls.attachMedia(video);
   hls.loadSource(url);
 }
@@ -205,7 +226,6 @@ subtitleTrackSelect.addEventListener("change", () => {
 subtitleToggle.addEventListener("change", () => {
   if (hls) {
     if (subtitleToggle.checked) {
-      // Enable subtitles: pick first available track if none selected
       if (hls.subtitleTrack < 0 && hls.subtitleTracks.length > 0) {
         hls.subtitleTrack = 0;
         subtitleTrackSelect.value = "0";
@@ -215,27 +235,6 @@ subtitleToggle.addEventListener("change", () => {
       subtitleTrackSelect.value = "-1";
     }
   }
-});
-
-hls.on(Events.AUDIO_TRACK_SWITCHED, ({ id }: { id: number }) => {
-  audioTrackSelect.value = String(id);
-  appendLog(`Audio track switched to ${id}`, "log-info");
-});
-
-hls.on(Events.SUBTITLE_TRACK_SWITCH, ({ id }: { id: number }) => {
-  subtitleTrackSelect.value = String(id);
-  subtitleToggle.checked = id >= 0;
-  appendLog(`Subtitle track switched to ${id}`, "log-info");
-});
-
-hls.on(Events.AUDIO_TRACKS_UPDATED, () => {
-  populateTrackSelects();
-  appendLog(`Audio tracks updated: ${hls.audioTracks.length}`, "log-info");
-});
-
-hls.on(Events.SUBTITLE_TRACKS_UPDATED, () => {
-  populateTrackSelects();
-  appendLog(`Subtitle tracks updated: ${hls.subtitleTracks.length}`, "log-info");
 });
 
 video.addEventListener("timeupdate", () => {

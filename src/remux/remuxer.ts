@@ -10,6 +10,7 @@ export interface RemuxResult {
   videoData?: Uint8Array;
   videoTrack?: RemuxedTrack;
   audioTrack?: RemuxedTrack;
+  metadata?: Array<{ pts: number; data: Uint8Array }>;
 }
 
 export interface RemuxedTrack {
@@ -63,6 +64,9 @@ export class Remuxer {
     }
     if (demuxResult.audioTrack) {
       this._remuxAudio(demuxResult.audioTrack);
+    }
+    if (demuxResult.metadata) {
+      result.metadata = demuxResult.metadata;
     }
 
     // Build init segment with all tracks (video + audio combined)

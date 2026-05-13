@@ -32,6 +32,7 @@ export const ErrorDetails = {
   BUFFER_INCOMPATIBLE_CODECS_ERROR: 'bufferIncompatibleCodecsError',
   BUFFER_FULL_ERROR: 'bufferFullError',
   INTERNAL_EXCEPTION: 'internalException',
+  MEDIA_ERROR_RECOVERED: 'mediaErrorRecovered',
 } as const;
 
 export type ErrorDetail = (typeof ErrorDetails)[keyof typeof ErrorDetails];

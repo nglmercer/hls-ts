@@ -46,6 +46,7 @@ export interface DemuxedAudioSample {
 export interface DemuxResult {
   videoTrack?: DemuxedVideoTrack;
   audioTrack?: DemuxedAudioTrack;
+  metadata?: Array<{ pts: number; data: Uint8Array }>;
 }
 
 export interface IDemuxer {
