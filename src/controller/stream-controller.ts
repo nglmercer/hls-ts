@@ -121,44 +121,79 @@ export class StreamController {
     }
   }
 
-  private _startLoading(): void {
+_startLoading(): void {
     this._paused = false;
+    const startPosition = this.hls.config.startPosition;
+    if (startPosition >= 0) {
+      this._loadStartPosition(startPosition);
+    } else {
+      this._loadNextFragment();
+    }
+  }
+
+  private _loadStartPosition(time: number): void {
+    const level = this._levelController.currentLevel;
+    if (level?.details) {
+      const frag = this._findFragmentByPTS(time, level.details.fragments);
+      if (frag) {
+        this._currentFrag = frag;
+        this._fragQueue = level.details.fragments.filter(f => f.sn >= frag.sn);
+      } else {
+        this._fragQueue = [...level.details.fragments];
+      }
+    }
     this._loadNextFragment();
   }
 
-  _onSeeking = (): void => {
+  _seekTo = (time: number): void => {
+    if (!this._media) return;
+
     this._seeking = true;
+    this._loading = false;
+    this._currentFrag = null;
     this._fragQueue = [];
     this._fragmentLoader.abort();
-    this._transmuxer.reset();
+
+    this._media.currentTime = time;
+
+    this.hls.trigger(Events.BUFFER_RESET);
     this._lastLevel = undefined;
 
-    const targetTime = this._media?.currentTime ?? 0;
-    if (targetTime > 1) {
-      this.hls.trigger(Events.BUFFER_FLUSHING, { startOffset: 0, endOffset: Math.max(0, targetTime - 1) });
+    // Only flush the buffer ahead of the seek target; preserve already-played buffer
+    this.hls.trigger(Events.BUFFER_FLUSHING, { startOffset: time, endOffset: Infinity });
+  };
+
+  _onSeeking = (): void => {
+    this._seeking = true;
+    this._loading = false;
+    this._currentFrag = null;
+    this._fragQueue = [];
+    this._fragmentLoader.abort();
+    this.hls.trigger(Events.BUFFER_RESET);
+    this._lastLevel = undefined;
+
+    this.hls.trigger(Events.BUFFER_FLUSHING, { startOffset: 0, endOffset: Infinity });
+
+    // Start loading immediately at the seek position to break the Catch-22
+    if (this._media) {
+      const targetTime = this._media.currentTime;
+      const level = this._levelController.currentLevel;
+      if (level?.details) {
+        const frag = this._findFragmentByPTS(targetTime, level.details.fragments);
+        if (frag) {
+          this._fragQueue = level.details.fragments.filter(f => f.sn >= frag.sn);
+          this._loadNextFragment();
+        }
+      }
     }
   };
 
   _onSeeked = (): void => {
-    if (!this._media) {
-      this._seeking = false;
-      return;
-    }
-
-    const targetTime = this._media.currentTime;
-    const level = this._levelController.currentLevel;
-    if (!level?.details) {
-      this._seeking = false;
-      return;
-    }
-
-    const frag = this._findFragmentByPTS(targetTime, level.details.fragments);
-    if (frag) {
-      this._fragQueue = level.details.fragments.filter(f => f.sn >= frag.sn);
-    }
-
     this._seeking = false;
-    this._loadNextFragment();
+    // If _onSeeking already started a load, this might be redundant but safe
+    if (!this._loading) {
+      this._loadNextFragment();
+    }
   };
 
   _onTimeUpdate = (): void => {
@@ -167,7 +202,7 @@ export class StreamController {
   };
 
   _onPlaying = (): void => {
-    if (this._paused || this._seeking) return;
+    if (this._paused) return;
     if (!this._loading) this._loadNextFragment();
   };
 
@@ -191,7 +226,7 @@ export class StreamController {
   }
 
   private _loadNextFragment(): void {
-    if (this._paused || this._loading || this._seeking) return;
+    if (this._paused || this._loading) return;
     if (this._fragQueue.length === 0) return;
 
     if (this._checkBufferTimer) {

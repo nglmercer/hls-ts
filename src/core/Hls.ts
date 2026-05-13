@@ -32,7 +32,7 @@ export class Hls implements HlsEventEmitter {
   private playlistLoader: PlaylistLoader;
   private bufferController: BufferController;
   private levelController: LevelController;
-  private streamController: StreamController;
+  public streamController: StreamController;
   private abrController: AbrController;
   private gapController: GapController;
   private errorController: ErrorController;
@@ -166,8 +166,13 @@ export class Hls implements HlsEventEmitter {
     this.trigger(Events.MANIFEST_LOADING, { url: this._url });
   }
 
-  stopLoad(): void {
+stopLoad(): void {
     // Basic stop logic
+  }
+
+  seekTo(time: number): void {
+    if (!this._media) return;
+    this.streamController._seekTo(time);
   }
 
   recoverMediaError(): void {
@@ -225,6 +230,7 @@ export class Hls implements HlsEventEmitter {
     this.on(Events.BUFFER_CODECS, bc._onBufferCodecs);
     this.on(Events.BUFFER_APPENDING, bc._onBufferAppending);
     this.on(Events.BUFFER_FLUSHING, bc._onBufferFlushing);
+    this.on(Events.BUFFER_RESET, bc._onBufferReset);
     this.on(Events.LEVEL_UPDATED, bc._onLevelUpdated);
 
     this.on(Events.MANIFEST_PARSED, lc._onManifestParsed);

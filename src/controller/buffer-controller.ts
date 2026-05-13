@@ -80,10 +80,26 @@ export class BufferController {
   };
 
   _onBufferFlushing = (data: { startOffset: number; endOffset: number }): void => {
-    if (!this._sourceBuffer || this._sourceBuffer.updating) return;
+    if (!this._sourceBuffer) return;
+    if (this._sourceBuffer.updating) {
+      try { this._sourceBuffer.abort(); } catch { /* ignore */ }
+    }
     try {
-      this._sourceBuffer.remove(data.startOffset, data.endOffset);
+      const end = (data.endOffset === Infinity && this._mediaSource) ? this._mediaSource.duration : data.endOffset;
+      if (end > data.startOffset) {
+        this._sourceBuffer.remove(data.startOffset, end);
+      }
     } catch { /* ignore */ }
+  };
+
+  _onBufferReset = (): void => {
+    this._queue = [];
+    this._retryData = null;
+    this._appending = false;
+    this._evicting = false;
+    if (this._sourceBuffer?.updating) {
+      try { this._sourceBuffer.abort(); } catch { /* ignore */ }
+    }
   };
 
   private _createMediaSource(): void {
