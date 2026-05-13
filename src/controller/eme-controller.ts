@@ -161,7 +161,7 @@ export class EMEController {
       return;
     }
 
-    this.hls.trigger(Events.MEDIA_KEY_MESSAGE, { session, message: msgEvent.message, messageType: msgEvent.messageType });
+    this.hls.trigger(Events.MEDIA_KEY_MESSAGE, { session, message: new Uint8Array(msgEvent.message), messageType: msgEvent.messageType });
 
     try {
       // Fetch the license

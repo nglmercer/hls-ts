@@ -143,7 +143,7 @@ export class StreamController {
       return;
     }
 
-    if (this._fragQueue.length > 0 && !this._media?.paused) {
+    if (this._fragQueue.length > 0 && !this._media?.paused && this._levelController.manualLevel < 0) {
       const bw = this._abrController.bwEstimate;
       const nextLevelId = this._abrController.getNextLevel(bw);
       const currentLevel = this._levelController.currentLevel;
@@ -348,7 +348,7 @@ export class StreamController {
           onError: (err) => {
             this._loading = false;
             const reason = err instanceof Error ? err.message : JSON.stringify(err);
-            this.hls.trigger(Events.ERROR, { type: ErrorTypes.NETWORK_ERROR, details: ErrorDetails.FRAG_LOAD_ERROR, reason, frag });
+            this.hls.trigger(Events.ERROR, { type: ErrorTypes.NETWORK_ERROR, details: ErrorDetails.FRAG_LOAD_ERROR, reason, frag, fatal: false });
             this._loadNextFragment();
           },
           onTimeout: () => {

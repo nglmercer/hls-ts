@@ -2,6 +2,7 @@ import { Events } from '../types/events';
 import { ErrorTypes, ErrorDetails } from '../types/errors';
 import type { HlsError } from '../types/errors';
 import type { Hls } from '../core/Hls';
+import type { Fragment } from '../types/level';
 
 interface RecoveryState {
   retryCount: number;
@@ -85,9 +86,9 @@ export class ErrorController {
         // Trigger frag loading directly or level loading depending on the actual error.
         // For fragment errors, load the fragment URL.
         if (error.details === ErrorDetails.FRAG_LOAD_ERROR || error.details === ErrorDetails.FRAG_LOAD_TIMEOUT) {
-          this.hls.trigger(Events.FRAG_LOADING, { frag });
+          this.hls.trigger(Events.FRAG_LOADING, { frag: frag as any as Fragment });
         } else {
-          this.hls.trigger(Events.LEVEL_LOADING, { url: frag.level ? this.hls.levels[frag.level]?.url : this.hls.url });
+          this.hls.trigger(Events.LEVEL_LOADING, { url: (frag.level ? this.hls.levels[frag.level]?.url : this.hls.url) ?? '' });
         }
       }, state.backoffMs);
     }
@@ -103,7 +104,7 @@ export class ErrorController {
       const currentTime = media.currentTime;
 
       if (error.details === ErrorDetails.BUFFER_APPEND_ERROR) {
-        this.hls.trigger(Events.BUFFER_RESET, {});
+        this.hls.trigger(Events.BUFFER_RESET);
       }
 
       this.hls.detachMedia();

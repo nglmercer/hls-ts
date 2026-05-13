@@ -1,7 +1,7 @@
 import { Events } from '../types/events';
 import type { Hls } from '../core/Hls';
-import type { Level } from '../types/level';
 import { TrackTypes, SourceBufferModes, type TrackType, ErrorDetails, ErrorTypes, MediaSourceReadyStates, MediaSourceEvents, SourceBufferEvents, MimeTypes, DefaultCodecs } from '../types';
+import type { Level, LevelDetails, ManifestData } from '../types/level';
 import { Logger } from '../utils/logger';
 
 interface CodecInfo {
@@ -45,7 +45,7 @@ export class BufferController {
     this._cleanMediaSource();
   };
 
-  _onManifestParsed = (data: { levels: Level[]; audioTracks: any[] }): void => {
+  _onManifestParsed = (data: ManifestData): void => {
     this._hasAlternateAudio = data.audioTracks && data.audioTracks.length > 0;
     if (data.levels.length > 0) {
       const level = data.levels[0];
@@ -58,7 +58,7 @@ export class BufferController {
     }
   };
 
-  _onLevelUpdated = (data: { level: Level; details: Record<string, unknown> }): void => {
+  _onLevelUpdated = (data: { level: Level; details: LevelDetails }): void => {
     if (this._mediaSource && this._mediaSource.readyState === MediaSourceReadyStates.OPEN) {
       if (!data.details.live && data.details.totalduration) {
         const duration = Number(data.details.totalduration);
@@ -360,7 +360,7 @@ export class BufferController {
     this._retryData.set(type, null);
   }
 
-  private _parseCodecs(level: Level): CodecInfo {
+  private _parseCodecs(level: { codecSet?: string }): CodecInfo {
     const codecInfo: CodecInfo = {};
     if (level.codecSet) {
       const parts = level.codecSet.split(',');

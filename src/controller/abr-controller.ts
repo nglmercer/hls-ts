@@ -1,5 +1,5 @@
 import type { Hls } from '../core/Hls';
-import type { Level, Fragment } from '../types/level';
+import type { Level, LevelParsed, Fragment } from '../types/level';
 
 export class EWMA {
   private _alpha: number;
@@ -56,8 +56,8 @@ export class AbrController {
 
   destroy(): void { }
 
-  public _onManifestParsed = (data: { levels: Level[] }): void => {
-    this._levels = data.levels.map((l: Level, i: number) => ({
+  public _onManifestParsed = (data: { levels: LevelParsed[] }): void => {
+    this._levels = data.levels.map((l, i: number) => ({
       id: i,
       bitrate: l.bitrate,
       width: l.width || 0,
@@ -93,7 +93,7 @@ export class AbrController {
   };
 
   public _onLevelLoaded = (data: { level: Level }): void => {
-    this._currentLevel = data.level?.id ?? this._currentLevel;
+    this._currentLevel = data.level.id ?? this._currentLevel;
   };
 
   getNextLevel(bitrate: number): number {

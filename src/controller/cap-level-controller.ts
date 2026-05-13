@@ -1,6 +1,6 @@
 import { Events } from '../types/events';
 import type { Hls } from '../core/Hls';
-import type { Level } from '../types/level';
+import type { ManifestData } from '../types/level';
 
 export class CapLevelController {
   private hls: Hls;
@@ -54,7 +54,7 @@ export class CapLevelController {
     this._media = null;
   };
 
-  public _onManifestParsed = (data: { levels: Level[] }): void => {
+  public _onManifestParsed = (data: ManifestData): void => {
     this._levels = data.levels.length;
     this._onResize();
   };

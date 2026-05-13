@@ -13,10 +13,19 @@ export class LevelController {
   private _levels: Level[] = [];
   private _levelMap: Map<string, Level> = new Map();
   private _currentLevel: Level | null = null;
+  private _manualLevel: number = -1;
   private _playlistLoader: PlaylistLoader;
   private _abrController: AbrController;
   private _livePollInterval: ReturnType<typeof setInterval> | null = null;
   private _lastCanSkip: boolean = false;
+
+  get manualLevel(): number {
+    return this._manualLevel;
+  }
+
+  set manualLevel(value: number) {
+    this._manualLevel = value;
+  }
 
   constructor(hls: Hls, abrController: AbrController) {
     this.hls = hls;
@@ -74,11 +83,12 @@ export class LevelController {
           {
             onSuccess: (response) => {
               const result = parseMediaPlaylist(response.data, baseurl);
-              this.hls.trigger(Events.LEVEL_LOADED, {
-                url: this._currentLevel!.url,
-                data: response.data,
-                ...result,
-              });
+        this.hls.trigger(Events.LEVEL_LOADED, {
+          url: this._currentLevel!.url,
+          level: this._currentLevel!,
+          data: response.data,
+          ...result,
+        });
             },
             onError: () => { }, // silent retry on interval
             onTimeout: () => { },
@@ -188,6 +198,7 @@ export class LevelController {
           const result = parseMediaPlaylist(response.data, baseurl);
           this.hls.trigger(Events.LEVEL_LOADED, {
             url: level.url,
+            level,
             data: response.data,
             ...result,
           });

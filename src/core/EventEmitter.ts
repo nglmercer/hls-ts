@@ -43,7 +43,7 @@ export class EventEmitter implements HlsEventEmitter {
     } else {
       this._once.set(event as string, [wrapped]);
     }
-    this.on(event, wrapped);
+    this.on(event, wrapped as EventHandler<EventName>);
   }
 
   off<EventName extends Event>(event: EventName, handler: EventHandler<EventName>): void {

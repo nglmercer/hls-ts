@@ -1,4 +1,4 @@
-import { TrackType } from './constants';
+import type { TrackType } from './constants';
 import type { Level, LevelDetails, Fragment, Part, MediaPlaylist, ManifestData, LevelParsed } from './level';
 import type { HlsError } from './errors';
 
@@ -149,7 +149,7 @@ export type HlsEventPayloads = {
   [Events.LEVEL_SWITCHING]: { level: number };
   [Events.LEVEL_SWITCHED]: { level: number };
   [Events.LEVEL_LOADING]: { url: string; level?: Level };
-  [Events.LEVEL_LOADED]: { url: string; data: string } & PlaylistParseResult;
+  [Events.LEVEL_LOADED]: { url: string; level?: Level; data: string } & PlaylistParseResult;
   [Events.LEVEL_UPDATED]: { level: Level; details: LevelDetails };
   [Events.FRAG_LOADING]: { frag: Fragment; part?: Part };
   [Events.FRAG_LOAD_PROGRESS]: { frag: Fragment; part?: Part; stats: FragmentLoadStats };

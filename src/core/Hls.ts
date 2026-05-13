@@ -1,4 +1,4 @@
-import { EventEmitter, type HlsEventEmitter } from './EventEmitter';
+import { EventEmitter } from './EventEmitter';
 import type { EventHandler } from './EventEmitter';
 import { Events } from '../types/events';
 import { defaultConfig, type HlsConfig } from '../types/config';
@@ -26,7 +26,7 @@ interface ComponentAPI {
   destroy(): void;
 }
 
-export class Hls implements HlsEventEmitter {
+export class Hls {
   static defaultConfig: HlsConfig | undefined;
 
   public readonly config: HlsConfig;
@@ -163,7 +163,10 @@ export class Hls implements HlsEventEmitter {
   }
 
   set currentLevel(newLevel: number) {
-    this.levelController.loadLevel(newLevel);
+    this.levelController.manualLevel = newLevel;
+    if (newLevel >= 0) {
+      this.levelController.loadLevel(newLevel);
+    }
   }
 
   get nextLevel(): number {
@@ -282,8 +285,8 @@ export class Hls implements HlsEventEmitter {
 
     this.on(Events.MANIFEST_PARSED, lc._onManifestParsed);
     this.on(Events.LEVEL_LOADING, lc._onLevelLoading);
-    this.on(Events.LEVEL_LOADED, lc._onLevelLoaded);
-
+    this.on(Events.LEVEL_LOADED, lc._onLevelLoaded as any);
+ 
     this.on(Events.MEDIA_ATTACHED, sc._onMediaAttached);
     this.on(Events.MEDIA_DETACHED, sc._onMediaDetached);
     this.on(Events.MEDIA_SEEKING, sc._onSeeking);
@@ -295,7 +298,7 @@ export class Hls implements HlsEventEmitter {
 
     this.on(Events.MANIFEST_PARSED, ac._onManifestParsed);
     this.on(Events.FRAG_LOADED, ac._onFragLoaded);
-    this.on(Events.LEVEL_LOADED, ac._onLevelLoaded);
+    this.on(Events.LEVEL_LOADED, ac._onLevelLoaded as any);
 
     this.on(Events.MEDIA_ATTACHED, gc._onMediaAttached);
     this.on(Events.MEDIA_DETACHED, gc._onMediaDetached);
