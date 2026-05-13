@@ -14,6 +14,7 @@ export class BufferController {
   private _mediaSource: MediaSource | null = null;
   private _sourceBuffers: Map<TrackType, SourceBuffer> = new Map();
   private _media: HTMLMediaElement | null = null;
+  private _hasAlternateAudio: boolean = false;
   private _objectUrl: string = '';
   private _codecs: CodecInfo = {};
   private _queues: Map<TrackType, ArrayBuffer[]> = new Map();
@@ -43,10 +44,15 @@ export class BufferController {
     this._cleanMediaSource();
   };
 
-  _onManifestParsed = (data: { levels: Level[]; audioTracks: unknown[] }): void => {
+  _onManifestParsed = (data: { levels: Level[]; audioTracks: any[] }): void => {
+    this._hasAlternateAudio = data.audioTracks && data.audioTracks.length > 0;
     if (data.levels.length > 0) {
       const level = data.levels[0];
       const codecs = this._parseCodecs(level);
+      // If we have alternate audio, ignore the audio codec from the video level
+      if (this._hasAlternateAudio) {
+        delete codecs.audioCodec;
+      }
       this.hls.trigger(Events.BUFFER_CODECS, codecs);
     }
   };
@@ -177,38 +183,70 @@ export class BufferController {
     this.logger.log(`isTypeSupported: ${MediaSource.isTypeSupported(mime)}`);
 
     try {
-      const types = [TrackTypes.VIDEO, TrackTypes.AUDIO];
-      for (const type of types) {
-        let mime = '';
-        if (type === TrackTypes.VIDEO && this._codecs.videoCodec) {
-          mime = `${MimeTypes.VIDEO_MP4}; codecs="${this._codecs.videoCodec}"`;
-        } else if (type === TrackTypes.AUDIO && this._codecs.audioCodec) {
-          mime = `${MimeTypes.AUDIO_MP4}; codecs="${this._codecs.audioCodec}"`;
-        } else if (type === TrackTypes.VIDEO && !this._codecs.videoCodec && !this._codecs.audioCodec) {
-          // Fallback
-          mime = `${MimeTypes.VIDEO_MP4}; codecs="${DefaultCodecs.AVC}"`;
-        }
+      // Logic for multiplexed vs separate tracks:
+      // If we have both video and audio codecs, AND no alternate audio is present, 
+      // we use a single combined SourceBuffer for multiplexed TS.
+      const isMultiplexed = this._codecs.videoCodec && this._codecs.audioCodec && !this._hasAlternateAudio;
 
-        if (mime && MediaSource.isTypeSupported(mime) && !this._sourceBuffers.has(type)) {
-          const sb = this._mediaSource.addSourceBuffer(mime);
-          sb.mode = SourceBufferModes.SEGMENTS;
-          this._sourceBuffers.set(type, sb);
-          sb.addEventListener(SourceBufferEvents.UPDATE_END, () => {
-            this._appending.set(type, false);
-            this._evicting.set(type, false);
-            this._processQueue(type);
+      if (isMultiplexed) {
+        const mime = `${MimeTypes.VIDEO_MP4}; codecs="${this._codecs.videoCodec},${this._codecs.audioCodec}"`;
+        this.logger.log(`Creating combined SourceBuffer: ${mime}`);
+        const sb = this._mediaSource.addSourceBuffer(mime);
+        sb.mode = SourceBufferModes.SEGMENTS;
+        this._sourceBuffers.set(TrackTypes.VIDEO, sb);
+        this._sourceBuffers.set(TrackTypes.AUDIO, sb); // Map both to the same SB
+        
+        sb.addEventListener(SourceBufferEvents.UPDATE_END, () => {
+          this._appending.set(TrackTypes.VIDEO, false);
+          this._appending.set(TrackTypes.AUDIO, false);
+          this._evicting.set(TrackTypes.VIDEO, false);
+          this._evicting.set(TrackTypes.AUDIO, false);
+          this._processQueue(TrackTypes.VIDEO);
+          this._processQueue(TrackTypes.AUDIO);
+        });
+
+        sb.addEventListener(SourceBufferEvents.ERROR, (e) => {
+          this.logger.error('Combined SourceBuffer error', e);
+          this.hls.trigger(Events.ERROR, {
+            type: ErrorTypes.MEDIA_ERROR,
+            details: ErrorDetails.BUFFER_APPEND_ERROR,
+            fatal: true,
+            reason: 'Combined SourceBuffer error during append',
           });
-          sb.addEventListener(SourceBufferEvents.ERROR, (e) => {
-            this.logger.error(`SourceBuffer ${type} error`, e);
-            this._appending.set(type, false);
-            this._queues.set(type, []);
-            this.hls.trigger(Events.ERROR, {
-              type: ErrorTypes.MEDIA_ERROR,
-              details: ErrorDetails.BUFFER_APPEND_ERROR,
-              fatal: true,
-              reason: `SourceBuffer ${type} error during append`,
+        });
+      } else {
+        // Create separate buffers for separate tracks (fMP4 or Alternate Audio)
+        const types = [TrackTypes.VIDEO, TrackTypes.AUDIO];
+        for (const type of types) {
+          let mime = '';
+          if (type === TrackTypes.VIDEO && this._codecs.videoCodec) {
+            mime = `${MimeTypes.VIDEO_MP4}; codecs="${this._codecs.videoCodec}"`;
+          } else if (type === TrackTypes.AUDIO && this._codecs.audioCodec) {
+            mime = `${MimeTypes.AUDIO_MP4}; codecs="${this._codecs.audioCodec}"`;
+          } else if (type === TrackTypes.VIDEO && !this._codecs.videoCodec && !this._codecs.audioCodec) {
+            mime = `${MimeTypes.VIDEO_MP4}; codecs="${DefaultCodecs.AVC}"`;
+          }
+
+          if (mime && MediaSource.isTypeSupported(mime) && !this._sourceBuffers.has(type)) {
+            this.logger.log(`Creating separate SourceBuffer for ${type}: ${mime}`);
+            const sb = this._mediaSource.addSourceBuffer(mime);
+            sb.mode = SourceBufferModes.SEGMENTS;
+            this._sourceBuffers.set(type, sb);
+            sb.addEventListener(SourceBufferEvents.UPDATE_END, () => {
+              this._appending.set(type, false);
+              this._evicting.set(type, false);
+              this._processQueue(type);
             });
-          });
+            sb.addEventListener(SourceBufferEvents.ERROR, (e) => {
+              this.logger.error(`SourceBuffer ${type} error`, e);
+              this.hls.trigger(Events.ERROR, {
+                type: ErrorTypes.MEDIA_ERROR,
+                details: ErrorDetails.BUFFER_APPEND_ERROR,
+                fatal: true,
+                reason: `SourceBuffer ${type} error during append`,
+              });
+            });
+          }
         }
       }
       this._sourceBufferReady = true;

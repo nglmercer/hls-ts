@@ -339,14 +339,32 @@ _startLoading(): void {
       if (remuxResult.initSegment) {
         this.hls.trigger(Events.FRAG_PARSING_INIT_SEGMENT, { frag, tracks: remuxResult });
         this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.initSegment, type: TrackTypes.VIDEO });
+        // Also append init segment to audio if separate track exists
+        if (remuxResult.audioTrack) {
+          this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.initSegment, type: TrackTypes.AUDIO });
+        }
       }
 
       if (remuxResult.metadata) {
         this.hls.trigger(Events.FRAG_PARSING_METADATA, { frag, samples: remuxResult.metadata });
       }
 
-      // Append combined media data (moof+mdat for each track, concatenated)
-      if (remuxResult.data) {
+      // Append media data. Prefer separate tracks if the demuxer/remuxer provided them.
+      if (remuxResult.videoData) {
+        this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.videoData, type: TrackTypes.VIDEO });
+        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.videoData, type: TrackTypes.VIDEO });
+      }
+
+      if (remuxResult.audioData) {
+        // Only append audio from the video stream if we're not using an alternate audio track
+        if (this.hls.audioTrack === -1) {
+          this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.audioData, type: TrackTypes.AUDIO });
+          this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.audioData, type: TrackTypes.AUDIO });
+        }
+      }
+
+      // Fallback for combined data if separate tracks aren't used
+      if (!remuxResult.videoData && !remuxResult.audioData && remuxResult.data) {
         this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.data, type: TrackTypes.VIDEO });
         this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.data, type: TrackTypes.VIDEO });
       }
