@@ -313,6 +313,7 @@ export class Hls implements HlsEventEmitter {
     this.on(Events.MEDIA_ATTACHED, this.metadataController._onMediaAttached);
     this.on(Events.MEDIA_DETACHED, this.metadataController._onMediaDetached);
     this.on(Events.LEVEL_UPDATED, this.metadataController._onLevelUpdated);
+    this.on(Events.FRAG_PARSING_METADATA, this.metadataController._onFragParsingMetadata);
   }
 
   private _loadManifest(url: string): void {
