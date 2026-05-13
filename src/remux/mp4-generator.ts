@@ -413,8 +413,8 @@ function tfdt(baseMediaDecodeTime: number): Uint8Array {
   return box(t('tfdt'), w8(1), zeros(3), w64(baseMediaDecodeTime));
 }
 
-function trun(samples: MP4Sample[], dataOffset: number): Uint8Array {
-  // flags: data-offset-present (0x001), sample-duration-present (0x100), sample-size-present (0x200), sample-flags-present (0x400), sample-composition-time-offsets-present (0x800)
+// Returns {data, dataOffsetFieldPos} — position of the data_offset field in the trun box
+function trun(samples: MP4Sample[], dataOffset: number): { data: Uint8Array; dataOffsetFieldPos: number } {
   const flags = 0x001 | 0x100 | 0x200 | 0x400 | 0x800;
   const entries: Uint8Array[] = [];
   for (const s of samples) {
@@ -425,9 +425,13 @@ function trun(samples: MP4Sample[], dataOffset: number): Uint8Array {
       i32(s.cts),
     );
   }
-  return box(t('trun'), w8(0), w24(flags),
+  const entriesData = box(t('trun'), w8(0), w24(flags),
     w32(samples.length), i32(dataOffset), ...entries,
   );
+  return {
+    data: entriesData,
+    dataOffsetFieldPos: 20, // box header(8) + version(1) + flags(3) + sample_count(4) = 16, + offset of i32(dataOffset) within the box
+  };
 }
 
 export function initSegment(tracks: MP4Track[]): Uint8Array {
@@ -466,20 +470,22 @@ export function initSegment(tracks: MP4Track[]): Uint8Array {
 
 export function fragmentBox(track: MP4Track, samples: MP4Sample[], baseDts: number, sequenceNumber?: number): { moof: Uint8Array; mdat: Uint8Array } {
 
-  const trafBoxes: Uint8Array[] = [
-    tfhd(track),
-    tfdt(baseDts),
-  ];
+  const mfhdBox = box(t('mfhd'), w8(0), zeros(3), w32(sequenceNumber ?? 0));
+  const tfhdBox = tfhd(track);
+  const tfdtBox = tfdt(baseDts);
 
-  const trunBox = trun(samples, 0); // data_offset placeholder, will be patched
-  trafBoxes.push(trunBox);
+  // Pre-compute the trun data_offset field position to avoid linear scan later.
+  // Layout within moof: moof header(8) + mfhd + traf header(8) + tfhd + tfdt + trun
+  // Within trun: header(8) + version(1) + flags(3) + sample_count(4) + data_offset(4)
+  const moofPrefixSize = 8 + mfhdBox.byteLength + 8 + tfhdBox.byteLength + tfdtBox.byteLength;
+  const trunPrefixSize = 8 + 1 + 3 + 4; // trun header + version + flags + sample_count
+  const trunDataOffsetPos = moofPrefixSize + trunPrefixSize;
 
-  const moof = box(t('moof'),
-    box(t('mfhd'), w8(0), zeros(3), w32(sequenceNumber ?? 0)),
-    box(t('traf'), ...trafBoxes),
+  const trunResult = trun(samples, 0); // placeholder data_offset
+  const moof = box(t('moof'), mfhdBox,
+    box(t('traf'), tfhdBox, tfdtBox, trunResult.data),
   );
 
-  // Build mdat
   const dataSize = samples.reduce((sum, s) => sum + s.size, 0);
   const mdatBody = new Uint8Array(dataSize);
   let offset = 0;
@@ -489,23 +495,9 @@ export function fragmentBox(track: MP4Track, samples: MP4Sample[], baseDts: numb
   }
   const mdat = box(t('mdat'), mdatBody);
 
-  // Patch trun data_offset: it should point from the start of the moof to the start of the mdat payload
-  // data_offset = moof.byteLength + 8 (mdat header size)
-  const actualDataOffset = moof.byteLength + 8;
-
-  // Scan for trun box within moof to find the data_offset field
-  const trunType = [0x74, 0x72, 0x75, 0x6e];
+  const actualDataOffset = moof.byteLength + 8; // moof size + mdat header (8)
   const dv = new DataView(moof.buffer, moof.byteOffset, moof.byteLength);
-  for (let i = 8; i < moof.byteLength - 8; i++) {
-    if (moof[i] === trunType[0] && moof[i + 1] === trunType[1] &&
-      moof[i + 2] === trunType[2] && moof[i + 3] === trunType[3]) {
-      // Found trun box type at offset i (within the box, after the size field)
-      // trun layout after type: version (1) + flags (3) + sample_count (4) + data_offset (4)
-      const dataOffsetFieldPos = i + 12; // skip 'trun' type(4) + version(1) + flags(3) + sample_count(4)
-      dv.setInt32(dataOffsetFieldPos, actualDataOffset);
-      break;
-    }
-  }
+  dv.setInt32(trunDataOffsetPos, actualDataOffset);
 
   return { moof, mdat };
 }

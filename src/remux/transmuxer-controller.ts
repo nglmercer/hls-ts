@@ -79,20 +79,28 @@ export class TransmuxerController {
   }
 
   private _flushPendingAsInline(): void {
+    const errors: Error[] = [];
     for (const { request } of this._pendingQueue) {
       if (request.type === TransmuxerMessages.DEMUX && request.data && this._inline) {
-        const response = this._inline.transmux(
-          request.data, request.timeOffset || 0, request.baseDts || 0,
-          request.discontinuity || false, request.id,
-        );
-        const callback = this._callbacks.get(request.id);
-        if (callback) {
-          callback(response);
-          this._callbacks.delete(request.id);
+        try {
+          const response = this._inline.transmux(
+            request.data, request.timeOffset || 0, request.baseDts || 0,
+            request.discontinuity || false, request.id,
+          );
+          const callback = this._callbacks.get(request.id);
+          if (callback) {
+            callback(response);
+            this._callbacks.delete(request.id);
+          }
+        } catch (err) {
+          errors.push(err as Error);
         }
       }
     }
     this._pendingQueue = [];
+    if (errors.length > 0) {
+      this.logger.error('Inline transmuxer fallback errors:', errors);
+    }
   }
 
   transmux(data: Uint8Array, timeOffset: number, baseDts: number, discontinuity: boolean = false): Promise<TransmuxerResponse> {

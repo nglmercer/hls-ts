@@ -11,10 +11,12 @@ import { TrackTypes, type TrackType } from '../types';
 export class LevelController {
   private hls: Hls;
   private _levels: Level[] = [];
+  private _levelMap: Map<string, Level> = new Map();
   private _currentLevel: Level | null = null;
   private _playlistLoader: PlaylistLoader;
   private _abrController: AbrController;
   private _livePollInterval: ReturnType<typeof setInterval> | null = null;
+  private _lastCanSkip: boolean = false;
 
   constructor(hls: Hls, abrController: AbrController) {
     this.hls = hls;
@@ -59,6 +61,9 @@ export class LevelController {
           
           if (details.canSkipUntil && details.canSkipUntil > 0) {
             url += `&_HLS_skip=YES`;
+            this._lastCanSkip = true;
+          } else if (this._lastCanSkip) {
+            url += `&_HLS_skip=YES`;
           }
         }
 
@@ -85,18 +90,23 @@ export class LevelController {
   }
 
   _onManifestParsed = (data: ManifestData): void => {
-    this._levels = data.levels.map((l: LevelParsed, i: number) => ({
-      id: i,
-      url: l.url,
-      bitrate: l.bitrate,
-      width: l.width,
-      height: l.height,
-      audioCodec: l.audioCodec,
-      videoCodec: l.videoCodec,
-      codecSet: l.codecSet,
-      name: l.name,
-      frameRate: l.frameRate,
-    }));
+    this._levelMap.clear();
+    this._levels = data.levels.map((l: LevelParsed, i: number) => {
+      const level = {
+        id: i,
+        url: l.url,
+        bitrate: l.bitrate,
+        width: l.width,
+        height: l.height,
+        audioCodec: l.audioCodec,
+        videoCodec: l.videoCodec,
+        codecSet: l.codecSet,
+        name: l.name,
+        frameRate: l.frameRate,
+      };
+      this._levelMap.set(level.url, level);
+      return level;
+    });
 
     if (this._levels.length > 0) {
       const startLevel = this.hls.config.startLevel;
@@ -108,7 +118,7 @@ export class LevelController {
   _onLevelLoading = (_data: { url: string }): void => { };
  
   _onLevelLoaded = (data: { url: string } & PlaylistParseResult): void => {
-    const level = this._levels.find(l => l.url === data.url);
+    const level = this._levelMap.get(data.url);
     if (!level) return;
 
     let totalDuration = 0;
@@ -151,6 +161,10 @@ export class LevelController {
       canSkipUntil: data.canSkipUntil,
       partHoldBack: data.partHoldBack,
     };
+
+    if (!data.canSkipUntil || data.canSkipUntil <= 0) {
+      this._lastCanSkip = false;
+    }
 
     if (data.live && !this._livePollInterval) {
       this._startLivePolling(Number(data.targetduration));

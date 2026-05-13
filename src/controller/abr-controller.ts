@@ -99,15 +99,17 @@ export class AbrController {
   getNextLevel(bitrate: number): number {
     if (this._levels.length <= 1) return 0;
 
-    let bestLevel = 0;
-    for (let i = 0; i < this._levels.length; i++) {
-      if (this._levels[i].bitrate <= bitrate) {
-        bestLevel = i;
+    let lo = 0;
+    let hi = this._levels.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (this._levels[mid].bitrate <= bitrate) {
+        lo = mid + 1;
       } else {
-        break;
+        hi = mid - 1;
       }
     }
-    return bestLevel;
+    return Math.min(lo, this._levels.length - 1);
   }
 }
 

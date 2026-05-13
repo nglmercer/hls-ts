@@ -1,3 +1,5 @@
+const DEBUG = typeof process !== 'undefined' && process.env?.DEBUG ? true : false;
+
 export class Logger {
   private _prefix: string;
   private static _enabled: boolean = true;
@@ -19,13 +21,13 @@ export class Logger {
   }
 
   log(message?: any, ...optionalParams: any[]): void {
-    if (Logger._enabled) {
+    if (DEBUG && Logger._enabled) {
       console.log(this._prefix, message, ...optionalParams);
     }
   }
 
   warn(message?: any, ...optionalParams: any[]): void {
-    if (Logger._enabled) {
+    if (DEBUG && Logger._enabled) {
       console.warn(this._prefix, message, ...optionalParams);
     }
   }
@@ -36,15 +38,14 @@ export class Logger {
     }
   }
 
-  // Legacy static support for simple migration
   static log(message?: any, ...optionalParams: any[]): void {
-    if (this._enabled) {
+    if (DEBUG && this._enabled) {
       console.log(message, ...optionalParams);
     }
   }
 
   static warn(message?: any, ...optionalParams: any[]): void {
-    if (this._enabled) {
+    if (DEBUG && this._enabled) {
       console.warn(message, ...optionalParams);
     }
   }

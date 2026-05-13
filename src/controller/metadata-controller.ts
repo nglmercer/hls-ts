@@ -100,7 +100,10 @@ export class MetadataController {
 
   private _startPolling(): void {
     this._stopPolling();
-    this._pollTimer = setInterval(() => this._checkDateranges(), 250);
+    this._pollTimer = setInterval(() => {
+      if (this._dateranges.length === 0 && this._inbandMetadata.length === 0) return;
+      this._checkDateranges();
+    }, 500);
   }
 
   private _stopPolling(): void {

@@ -131,7 +131,7 @@ export function parseMasterPlaylist(data: string, baseurl: string): ParseResult 
 export function parseMediaPlaylist(data: string, baseurl: string): PlaylistParseResult {
   const fragments: PlaylistParseResult['fragments'] = [];
   const dateranges: PlaylistParseResult['dateranges'] = [];
-  const parts: any[] = [];
+  const parts: PlaylistParseResult['fragments'][0]['parts'] = [];
   const lines = data.split('\n');
   let targetduration = 0;
   let version = 1;
@@ -289,11 +289,13 @@ export function parseMediaPlaylist(data: string, baseurl: string): PlaylistParse
   };
 }
 
+const ATTR_RE = /([A-Z0-9-]+)\s*=\s*(?:"([^"]*)"|([^",\s]*))/g;
+
 function parseAttributes(data: string): Record<string, string> {
   const attrs: Record<string, string> = {};
-  const re = /([A-Z0-9-]+)\s*=\s*(?:"([^"]*)"|([^",\s]*))/g;
+  ATTR_RE.lastIndex = 0;
   let match;
-  while ((match = re.exec(data)) !== null) {
+  while ((match = ATTR_RE.exec(data)) !== null) {
     attrs[match[1]!] = match[2] || match[3] || '';
   }
   return attrs;

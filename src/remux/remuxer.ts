@@ -51,6 +51,8 @@ export class Remuxer {
   private _startBaseDts: number = -1;
   private _videoTsOffset: number = -1;
   private _audioTsOffset: number = -1;
+  private _mp4VideoSamples: MP4Sample[] = [];
+  private _mp4AudioSamples: MP4Sample[] = [];
 
   remux(demuxResult: DemuxResult, baseDts: number): RemuxResult {
     if (this._startBaseDts === -1) {
@@ -97,8 +99,8 @@ export class Remuxer {
     // Each track gets its own fragment since they have different timescales
     if (videoSamples.length > 0) {
       const track = this._videoTrack!;
-      const mp4Track = this._toMP4Track(track);
-      const mp4Samples = videoSamples.map(s => this._toMP4Sample(s));
+      const mp4Track = this._reuseMP4Track(track);
+      const mp4Samples = this._samplesToMP4(track.samples, this._mp4VideoSamples);
       
       if (this._videoTsOffset === -1) {
         this._videoTsOffset = videoSamples[0].dts - this._startBaseDts;
@@ -116,8 +118,8 @@ export class Remuxer {
 
     if (audioSamples.length > 0) {
       const track = this._audioTrack!;
-      const mp4Track = this._toMP4Track(track);
-      let mp4Samples = audioSamples.map(s => this._toMP4Sample(s));
+      const mp4Track = this._reuseMP4Track(track);
+      let mp4Samples = this._samplesToMP4(audioSamples, this._mp4AudioSamples);
 
       if (this._audioTsOffset === -1) {
         this._audioTsOffset = audioSamples[0].dts - this._startBaseDts;
@@ -152,14 +154,6 @@ export class Remuxer {
       result.audioTrack = track;
 
       this._nextAudioPts = audioTfdt + mp4Samples.reduce((s, x) => s + x.duration, 0);
-    }
-
-    // Combine all fragment data into a single buffer for the single SourceBuffer
-    const parts: Uint8Array[] = [];
-    if (result.videoData) parts.push(result.videoData);
-    if (result.audioData) parts.push(result.audioData);
-    if (parts.length > 0) {
-      result.data = concat(...parts);
     }
 
     return result;
@@ -267,6 +261,45 @@ export class Remuxer {
       data: sample.data,
     };
   }
+
+  private _reuseMP4Track(track: RemuxedTrack): MP4Track {
+    return {
+      id: track.id,
+      type: track.type,
+      timescale: track.timescale,
+      duration: track.duration,
+      width: track.width,
+      height: track.height,
+      codec: track.codec,
+      sps: track.sps,
+      pps: track.pps,
+      vps: track.vps,
+      channelCount: track.channelCount,
+      sampleRate: track.sampleRate,
+      audioConfig: track.config,
+    };
+  }
+
+  private _samplesToMP4(samples: RemuxedSample[], reuse: MP4Sample[]): MP4Sample[] {
+    const count = samples.length;
+    while (reuse.length < count) reuse.push({} as MP4Sample);
+    for (let i = 0; i < count; i++) {
+      const s = samples[i];
+      const mp4 = reuse[i];
+      mp4.size = s.size;
+      mp4.duration = s.duration;
+      mp4.cts = s.pts - s.dts;
+      if (!mp4.flags) mp4.flags = {} as any;
+      mp4.flags.isLeading = 0;
+      mp4.flags.isDependedOn = 0;
+      mp4.flags.hasRedundancy = 0;
+      mp4.flags.degradPrio = 0;
+      mp4.flags.dependsOn = s.keyframe ? 2 : 1;
+      mp4.flags.isSync = s.keyframe;
+      mp4.data = s.data;
+    }
+    return reuse;
+  }
 }
 
 function concat(...arrays: Uint8Array[]): Uint8Array {
@@ -280,14 +313,13 @@ function concat(...arrays: Uint8Array[]): Uint8Array {
   return result;
 }
 
+const _silentFrameHighRate = new Uint8Array([0x21, 0x10, 0x04, 0x60, 0x8c, 0x1c]);
+const _silentFrameLowRate = new Uint8Array([0x21, 0x00, 0x49, 0x90, 0x02, 0x19, 0x00, 0x23, 0x00]);
+
 function generateSilentFrame(track: RemuxedTrack): Uint8Array {
   const sampleRate = track.sampleRate || 44100;
-  const channels = track.channelCount || 2;
-  // AAC silent frame: raw AAC block with fill_element (FIL)
-  // For standard AAC, a silent frame can be 0x21 0x10 0x04 0x60 0x8c 0x1c or longer
-  // This is a minimal valid AAC silent frame for LC-AAC 44100Hz stereo
   if (sampleRate >= 44100) {
-    return new Uint8Array([0x21, 0x10, 0x04, 0x60, 0x8c, 0x1c]);
+    return _silentFrameHighRate;
   }
-  return new Uint8Array([0x21, 0x00, 0x49, 0x90, 0x02, 0x19, 0x00, 0x23, 0x00]);
+  return _silentFrameLowRate;
 }

@@ -48,15 +48,24 @@ export class TSDemuxer implements IDemuxer {
       this._ptsRollover = 0;
       this._lastPts.clear();
       this._rolloverCounts.clear();
+      this._maxRolloverCount = 0;
       this._avcStream.flush(this);
       this._aacStream.flush(this);
     }
   }
 
   demux(data: Uint8Array, timeOffset: number): DemuxResult {
-    this._videoTrack = undefined;
-    this._audioTrack = undefined;
-    this._metadata = [];
+    if (this._videoTrack) {
+      this._videoTrack.samples.length = 0;
+    } else {
+      this._videoTrack = undefined;
+    }
+    if (this._audioTrack) {
+      this._audioTrack.samples.length = 0;
+    } else {
+      this._audioTrack = undefined;
+    }
+    this._metadata.length = 0;
 
     let offset = 0;
     // Find first sync byte
@@ -294,16 +303,12 @@ export class TSDemuxer implements IDemuxer {
         count--;
       }
     } else {
-      // For a new PID, align its rollover count with the maximum seen so far
-      let maxCount = 0;
-      for (const c of this._rolloverCounts.values()) {
-        if (c > maxCount) maxCount = c;
-      }
-      count = maxCount;
+      count = this._maxRolloverCount;
     }
 
     this._lastPts.set(pid, rawPts);
     this._rolloverCounts.set(pid, count);
+    if (count > this._maxRolloverCount) this._maxRolloverCount = count;
     return rawPts + count * PTS_CYCLE;
   }
 

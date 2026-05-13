@@ -18,6 +18,7 @@ export class BufferController {
   private _objectUrl: string = '';
   private _codecs: CodecInfo = {};
   private _queues: Map<TrackType, ArrayBuffer[]> = new Map();
+  private _queueIdx: Map<TrackType, number> = new Map();
   private _appending: Map<TrackType, boolean> = new Map();
   private _sourceBufferReady: boolean = false;
   private _pendingCodecs: CodecInfo | null = null;
@@ -84,7 +85,10 @@ export class BufferController {
 
   _onBufferAppending = (data: { data: ArrayBuffer; type: TrackType }): void => {
     const type = data.type || TrackTypes.VIDEO;
-    if (!this._queues.has(type)) this._queues.set(type, []);
+    if (!this._queues.has(type)) {
+      this._queues.set(type, []);
+      this._queueIdx.set(type, 0);
+    }
     this._queues.get(type)!.push(data.data);
     this._processQueue(type);
   };
@@ -108,6 +112,7 @@ export class BufferController {
 
   _onBufferReset = (): void => {
     this._queues.clear();
+    this._queueIdx.clear();
     this._retryData.clear();
     this._appending.clear();
     this._evicting.clear();
@@ -158,6 +163,7 @@ export class BufferController {
     this._sourceBuffers.clear();
     this._objectUrl = '';
     this._queues.clear();
+    this._queueIdx.clear();
     this._appending.clear();
     this._evicting.clear();
     this._retryData.clear();
@@ -264,8 +270,10 @@ export class BufferController {
     if (sb.updating || (this._media && this._media.error)) return;
 
     const queue = this._queues.get(type) || [];
-    const data = this._retryData.get(type) ?? (queue.length > 0 ? queue.shift()! : null);
+    const idx = this._queueIdx.get(type) || 0;
+    const data = this._retryData.get(type) ?? (idx < queue.length ? queue[idx]! : null);
     if (!data) return;
+    this._queueIdx.set(type, idx + 1);
     this._retryData.set(type, null);
 
     try {
@@ -304,8 +312,8 @@ export class BufferController {
       return;
     }
 
-    // Strategy 1: Evict data behind the playhead (keep only 5s behind)
-    const evictEnd = Math.max(0, currentTime - 5);
+    // Strategy 1: Evict data behind the playhead (keep only 2s behind for VOD, 5s for live)
+    const evictEnd = Math.max(0, currentTime - 2);
     const evictStart = buffered.start(0);
 
     if (evictEnd > evictStart + 0.5) {
@@ -313,7 +321,7 @@ export class BufferController {
       this._evicting.set(type, true);
       try {
         sb.remove(evictStart, evictEnd);
-        return; // updateend will retry the append via _processQueue
+        return;
       } catch {
         this._evicting.set(type, false);
       }
@@ -334,7 +342,20 @@ export class BufferController {
       }
     }
 
-    // Nothing could be evicted — drop the pending data to avoid infinite loop
+    // Strategy 3: For non-live streams, evict all data more than 2s behind the playhead
+    const behindEnd = Math.max(0, currentTime - 2);
+    const behindStart = buffered.start(0);
+    if (behindEnd > behindStart + 0.5) {
+      this.logger.log(`Evicting ${type} old data: ${behindStart.toFixed(1)}s - ${behindEnd.toFixed(1)}s`);
+      this._evicting.set(type, true);
+      try {
+        sb.remove(behindStart, behindEnd);
+        return;
+      } catch {
+        this._evicting.set(type, false);
+      }
+    }
+
     this.logger.warn(`No evictable range for ${type}, dropping data`);
     this._retryData.set(type, null);
   }

@@ -3,6 +3,7 @@ import type { Hls } from '../core/Hls';
 import type { MediaPlaylist, Fragment, LevelDetails } from '../types/level';
 import { FragmentLoader } from '../loader/fragment-loader';
 import { PlaylistLoader } from '../loader/playlist-loader';
+import type { StreamController } from './stream-controller';
 import { parseMediaPlaylist, type PlaylistParseResult } from '../parser/m3u8-parser';
 import { TransmuxerController } from '../remux/transmuxer-controller';
 import { TrackTypes, type HlsError, ErrorTypes, ErrorDetails } from '../types';
@@ -23,7 +24,7 @@ export class AudioStreamController {
   private _checkBufferTimer: ReturnType<typeof setInterval> | null = null;
   private logger = new Logger('AudioStreamController');
 
-  constructor(hls: Hls) {
+  constructor(hls: Hls, streamController?: StreamController) {
     this.hls = hls;
     this._fragmentLoader = new FragmentLoader();
     this._playlistLoader = new PlaylistLoader();

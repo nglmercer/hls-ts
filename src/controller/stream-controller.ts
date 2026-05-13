@@ -27,6 +27,8 @@ export class StreamController {
   private _lastCC: Map<number, number> = new Map();
   private _checkBufferTimer: ReturnType<typeof setTimeout> | null = null;
   private _timeUpdateTimer: ReturnType<typeof setTimeout> | null = null;
+  private _lastFragmentIndex: number = -1;
+  private _lastFragmentIndexLevel: number = -1;
   private logger = new Logger('StreamController');
 
   constructor(hls: Hls, levelController: LevelController, abrController: AbrController) {
@@ -252,6 +254,16 @@ export class StreamController {
 
   private _findFragmentByPTS(time: number, fragments: Fragment[]): Fragment | null {
     if (fragments.length === 0) return null;
+    if (this._lastFragmentIndex >= 0 && this._lastFragmentIndex < fragments.length) {
+      const probeIdx = this._lastFragmentIndex + 1;
+      if (probeIdx < fragments.length) {
+        const probe = fragments[probeIdx];
+        if (probe && time >= probe.start && time < probe.start + probe.duration) {
+          this._lastFragmentIndex = probeIdx;
+          return probe;
+        }
+      }
+    }
     let lo = 0;
     let hi = fragments.length - 1;
     while (lo <= hi) {
@@ -262,10 +274,12 @@ export class StreamController {
       } else if (time > f.start + f.duration) {
         lo = mid + 1;
       } else {
+        this._lastFragmentIndex = mid;
         return f;
       }
     }
-    return fragments[Math.min(lo, fragments.length - 1)] ?? null;
+    const result = fragments[Math.min(lo, fragments.length - 1)] ?? null;
+    return result;
   }
 
   private _loadNextFragment(): void {
@@ -466,36 +480,24 @@ onError: (err) => {
       // The MP4 spec allows ftyp+moov+moof+mdat in a single buffer.
       const initSeg = remuxResult.initSegment;
 
-      // Append media data. Prefer separate tracks if the demuxer/remuxer provided them.
-      if (remuxResult.videoData) {
-        this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.videoData, type: TrackTypes.VIDEO });
-        const videoPayload = initSeg
-          ? this._concatBuffers(initSeg, remuxResult.videoData)
-          : remuxResult.videoData;
-        this.hls.trigger(Events.BUFFER_APPENDING, { data: videoPayload, type: TrackTypes.VIDEO });
-      } else if (initSeg && !remuxResult.audioData && !remuxResult.data) {
-        // Init-only (no media data yet)
+      // Append init segment as separate event (avoids intermediate concat copies)
+      if (initSeg) {
         this.hls.trigger(Events.BUFFER_APPENDING, { data: initSeg, type: TrackTypes.VIDEO });
       }
 
-      if (remuxResult.audioData) {
-        // Only append audio from the video stream if we're not using an alternate audio track
-        if (this.hls.audioTrack === -1) {
-          this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.audioData, type: TrackTypes.AUDIO });
-          const audioPayload = (initSeg && remuxResult.audioTrack)
-            ? this._concatBuffers(initSeg, remuxResult.audioData)
-            : remuxResult.audioData;
-          this.hls.trigger(Events.BUFFER_APPENDING, { data: audioPayload, type: TrackTypes.AUDIO });
-        }
+      if (remuxResult.videoData) {
+        this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.videoData, type: TrackTypes.VIDEO });
+        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.videoData, type: TrackTypes.VIDEO });
       }
 
-      // Fallback for combined data if separate tracks aren't used
+      if (remuxResult.audioData && this.hls.audioTrack === -1) {
+        this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.audioData, type: TrackTypes.AUDIO });
+        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.audioData, type: TrackTypes.AUDIO });
+      }
+
       if (!remuxResult.videoData && !remuxResult.audioData && remuxResult.data) {
         this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.data, type: TrackTypes.VIDEO });
-        const combinedPayload = initSeg
-          ? this._concatBuffers(initSeg, remuxResult.data)
-          : remuxResult.data;
-        this.hls.trigger(Events.BUFFER_APPENDING, { data: combinedPayload, type: TrackTypes.VIDEO });
+        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.data, type: TrackTypes.VIDEO });
       }
 
       this.hls.trigger(Events.FRAG_PARSED, { frag });
@@ -512,10 +514,4 @@ onError: (err) => {
     }
   }
 
-  private _concatBuffers(a: Uint8Array, b: Uint8Array): Uint8Array {
-    const result = new Uint8Array(a.length + b.length);
-    result.set(a, 0);
-    result.set(b, a.length);
-    return result;
-  }
 }

@@ -1,8 +1,8 @@
-import { EventEmitter, type HlsEventEmitter } from './EventEmitter';
+import { EventEmitter } from './EventEmitter';
 import type { EventHandler } from './EventEmitter';
 import { Events } from '../types/events';
 import { defaultConfig, type HlsConfig } from '../types/config';
-import type { ManifestData, Level, MediaPlaylist } from '../types/level';
+import type { ManifestData } from '../types/level';
 import { PlaylistLoader } from '../loader/playlist-loader';
 import { parseMasterPlaylist, parseMediaPlaylist } from '../parser/m3u8-parser';
 import { ErrorTypes, ErrorDetails } from '../types/errors';
@@ -26,14 +26,14 @@ interface ComponentAPI {
   destroy(): void;
 }
 
-export class Hls implements HlsEventEmitter {
+export class Hls implements void {
   static defaultConfig: HlsConfig | undefined;
 
   public readonly config: HlsConfig;
   public readonly userConfig: Partial<HlsConfig>;
   public readonly logger: Logger;
+  private readonly _emitter: EventEmitter = new EventEmitter();
 
-  private _emitter: EventEmitter = new EventEmitter();
   private _media: HTMLMediaElement | null = null;
   private _url: string | null = null;
   private coreComponents: ComponentAPI[] = [];
@@ -55,7 +55,7 @@ export class Hls implements HlsEventEmitter {
 
   constructor(userConfig: Partial<HlsConfig> = {}) {
     this.userConfig = userConfig;
-    this.config = { ...defaultConfig, ...(Hls.defaultConfig as Partial<HlsConfig> || {}), ...userConfig };
+    this.config = { ...defaultConfig, ...(Hls.defaultConfig as Partial<HlsConfig> | undefined || {}), ...userConfig };
     this.logger = new Logger('Hls');
     this.playlistLoader = new PlaylistLoader();
 
@@ -132,12 +132,13 @@ export class Hls implements HlsEventEmitter {
       this._media.removeEventListener('seeking', this._onMediaSeeking);
       this._media.removeEventListener('seeked', this._onMediaSeeked);
     }
-    this.trigger(Events.MEDIA_DETACHED, {});
+    this._emitter.removeAllListeners(Events.MEDIA_DETACHED);
+    this.trigger(Events.MEDIA_DETACHED);
     this._media = null;
   }
 
   destroy(): void {
-    this.trigger(Events.DESTROYING, {});
+    this.trigger(Events.DESTROYING);
     for (const comp of this.coreComponents) comp.destroy();
     this.playlistLoader.abort();
     this._emitter.removeAllListeners();
@@ -153,7 +154,7 @@ export class Hls implements HlsEventEmitter {
     return this._media;
   }
 
-  get levels(): Level[] {
+  get levels(): import('../types/level').Level[] {
     return this.levelController.levels;
   }
 
@@ -166,7 +167,7 @@ export class Hls implements HlsEventEmitter {
   }
 
   get nextLevel(): number {
-    return this.currentLevel; // Simplified fallback
+    return this.currentLevel;
   }
 
   set nextLevel(newLevel: number) {
@@ -181,7 +182,7 @@ export class Hls implements HlsEventEmitter {
     this.audioTrackController.audioTrack = trackId;
   }
 
-  get audioTracks(): MediaPlaylist[] {
+  get audioTracks(): import('../types/level').MediaPlaylist[] {
     return this.audioTrackController.audioTracks;
   }
 
@@ -193,7 +194,7 @@ export class Hls implements HlsEventEmitter {
     this.subtitleTrackController.subtitleTrack = trackId;
   }
 
-  get subtitleTracks(): MediaPlaylist[] {
+  get subtitleTracks(): import('../types/level').MediaPlaylist[] {
     return this.subtitleTrackController.subtitleTracks;
   }
 
@@ -209,7 +210,7 @@ export class Hls implements HlsEventEmitter {
     if (startPosition !== -1) {
       this.config.startPosition = startPosition;
     }
-    this.trigger(Events.MANIFEST_LOADING, { url: this._url });
+    this.trigger(Events.MANIFEST_LOADING, { url: this._url! });
   }
 
   stopLoad(): void {
@@ -225,31 +226,31 @@ export class Hls implements HlsEventEmitter {
     this.errorController.recoverMediaError();
   }
 
-  on(event: string, handler: (...args: any[]) => void): void {
-    this._emitter.on(event, handler);
+  on<EventName extends import('../types/events').Event>(event: EventName, handler: EventHandler<EventName>): void {
+    return this._emitter.on(event, handler);
   }
 
-  once(event: string, handler: (...args: any[]) => void): void {
-    this._emitter.once(event, handler);
+  once<EventName extends import('../types/events').Event>(event: EventName, handler: EventHandler<EventName>): void {
+    return this._emitter.once(event, handler);
   }
 
-  off(event: string, handler: (...args: any[]) => void): void {
-    this._emitter.off(event, handler);
+  off<EventName extends import('../types/events').Event>(event: EventName, handler: EventHandler<EventName>): void {
+    return this._emitter.off(event, handler);
   }
 
-  emit(event: string, ...args: any[]): void {
-    this._emitter.emit(event, ...args);
+  emit<EventName extends import('../types/events').Event>(event: EventName, ...data: import('../types/events').HlsEventPayloads[EventName] extends void ? [] : [import('../types/events').HlsEventPayloads[EventName]]): void {
+    return this._emitter.emit(event, ...data);
   }
 
-  trigger(event: string, ...args: any[]): void {
-    this._emitter.emit(event, ...args);
+  trigger<EventName extends import('../types/events').Event>(event: EventName, ...data: import('../types/events').HlsEventPayloads[EventName] extends void ? [] : [import('../types/events').HlsEventPayloads[EventName]]): void {
+    return this._emitter.trigger(event, ...data);
   }
 
-  removeAllListeners(event?: string): void {
-    this._emitter.removeAllListeners(event);
+  removeAllListeners(event?: import('../types/events').Event): void {
+    return this._emitter.removeAllListeners(event);
   }
 
-  listeners(event: string): EventHandler[] {
+  listeners(event: import('../types/events').Event): EventHandler<any>[] {
     return this._emitter.listeners(event);
   }
 
