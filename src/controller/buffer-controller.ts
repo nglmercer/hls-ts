@@ -1,7 +1,7 @@
 import { Events } from '../types/events';
 import type { Hls } from '../core/Hls';
 import type { Level } from '../types/level';
-import { TrackTypes, SourceBufferModes, type TrackType, ErrorDetails, ErrorTypes } from '../types';
+import { TrackTypes, SourceBufferModes, type TrackType, ErrorDetails, ErrorTypes, MediaSourceReadyStates, MediaSourceEvents, SourceBufferEvents, MimeTypes, DefaultCodecs } from '../types';
 
 interface CodecInfo {
   videoCodec?: string;
@@ -50,7 +50,7 @@ export class BufferController {
   };
 
   _onLevelUpdated = (data: { level: Level; details: Record<string, unknown> }): void => {
-    if (this._mediaSource && this._mediaSource.readyState === 'open') {
+    if (this._mediaSource && this._mediaSource.readyState === MediaSourceReadyStates.OPEN) {
       if (!data.details.live && data.details.totalduration) {
         // Only set duration if it's different and source buffer is not updating
         if (this._mediaSource.duration !== data.details.totalduration && (!this._sourceBuffer || !this._sourceBuffer.updating)) {
@@ -66,7 +66,7 @@ export class BufferController {
 
   _onBufferCodecs = (data: CodecInfo): void => {
     this._codecs = data;
-    if (this._mediaSource && this._mediaSource.readyState === 'open') {
+    if (this._mediaSource && this._mediaSource.readyState === MediaSourceReadyStates.OPEN) {
       this._createSourceBuffer();
     } else {
       this._pendingCodecs = data;
@@ -95,7 +95,7 @@ export class BufferController {
     this._media.src = this._objectUrl;
 
     const onSourceOpen = () => {
-      ms.removeEventListener('sourceopen', onSourceOpen);
+      ms.removeEventListener(MediaSourceEvents.SOURCE_OPEN, onSourceOpen);
       if (this._pendingCodecs) {
         this._codecs = this._pendingCodecs;
         this._pendingCodecs = null;
@@ -107,11 +107,11 @@ export class BufferController {
       }
     };
 
-    ms.addEventListener('sourceopen', onSourceOpen);
+    ms.addEventListener(MediaSourceEvents.SOURCE_OPEN, onSourceOpen);
   }
 
   private _cleanMediaSource(): void {
-    if (this._sourceBuffer && this._mediaSource?.readyState === 'open') {
+    if (this._sourceBuffer && this._mediaSource?.readyState === MediaSourceReadyStates.OPEN) {
       try { this._mediaSource.removeSourceBuffer(this._sourceBuffer); } catch { /* ignore */ }
     }
 
@@ -131,7 +131,7 @@ export class BufferController {
   }
 
   private _createSourceBuffer(): void {
-    if (!this._mediaSource || this._mediaSource.readyState !== 'open') return;
+    if (!this._mediaSource || this._mediaSource.readyState !== MediaSourceReadyStates.OPEN) return;
     if (this._sourceBuffer) return;
 
     // Build a combined MIME type for both video and audio
@@ -140,26 +140,26 @@ export class BufferController {
     if (this._codecs.audioCodec) codecParts.push(this._codecs.audioCodec);
 
     if (codecParts.length === 0) {
-      codecParts.push('avc1.42e01e');
+      codecParts.push(DefaultCodecs.AVC);
     }
 
-    const mime = `video/mp4; codecs="${codecParts.join(',')}"`;
+    const mime = `${MimeTypes.VIDEO_MP4}; codecs="${codecParts.join(',')}"`;
     console.log(`[BufferController] Creating SourceBuffer with MIME: ${mime}`);
     console.log(`[BufferController] isTypeSupported: ${MediaSource.isTypeSupported(mime)}`);
 
     try {
       if (MediaSource.isTypeSupported(mime)) {
         this._sourceBuffer = this._mediaSource.addSourceBuffer(mime);
-        this._sourceBuffer.mode = SourceBufferModes.SEGMENTS;
+        this._sourceBuffer.mode = SourceBufferModes.SEQUENCE;
         this._sourceBufferReady = true;
-        this._sourceBuffer.addEventListener('updateend', () => {
+        this._sourceBuffer.addEventListener(SourceBufferEvents.UPDATE_END, () => {
           this._appending = false;
           if (this._evicting) {
             this._evicting = false;
           }
           this._processQueue();
         });
-        this._sourceBuffer.addEventListener('error', (e) => {
+        this._sourceBuffer.addEventListener(SourceBufferEvents.ERROR, (e) => {
           console.error('[BufferController] SourceBuffer error', e);
           this._appending = false;
           this._sourceBufferReady = false;
@@ -281,7 +281,7 @@ export class BufferController {
     }
     // Fallback if none found
     if (!codecInfo.videoCodec && !codecInfo.audioCodec) {
-      codecInfo.videoCodec = 'avc1.42e01e';
+      codecInfo.videoCodec = DefaultCodecs.AVC;
     }
     return codecInfo;
   }
