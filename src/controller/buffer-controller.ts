@@ -52,10 +52,11 @@ export class BufferController {
   _onLevelUpdated = (data: { level: Level; details: Record<string, unknown> }): void => {
     if (this._mediaSource && this._mediaSource.readyState === MediaSourceReadyStates.OPEN) {
       if (!data.details.live && data.details.totalduration) {
-        // Only set duration if it's different and source buffer is not updating
-        if (this._mediaSource.duration !== data.details.totalduration && (!this._sourceBuffer || !this._sourceBuffer.updating)) {
+        const duration = Number(data.details.totalduration);
+        // Only set duration if it's a valid positive number, different from current, and source buffer is not updating
+        if (!isNaN(duration) && duration > 0 && this._mediaSource.duration !== duration && (!this._sourceBuffer || !this._sourceBuffer.updating)) {
           try {
-            this._mediaSource.duration = Number(data.details.totalduration);
+            this._mediaSource.duration = duration;
           } catch (e) {
             console.warn('[BufferController] Failed to set duration:', e);
           }
@@ -150,7 +151,7 @@ export class BufferController {
     try {
       if (MediaSource.isTypeSupported(mime)) {
         this._sourceBuffer = this._mediaSource.addSourceBuffer(mime);
-        this._sourceBuffer.mode = SourceBufferModes.SEQUENCE;
+        this._sourceBuffer.mode = SourceBufferModes.SEGMENTS;
         this._sourceBufferReady = true;
         this._sourceBuffer.addEventListener(SourceBufferEvents.UPDATE_END, () => {
           this._appending = false;

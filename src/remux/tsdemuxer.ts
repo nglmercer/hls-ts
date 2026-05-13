@@ -29,7 +29,8 @@ export class TSDemuxer implements IDemuxer {
   private _continuityCounters: Map<number, number> = new Map();
   private _discontinuity: boolean = false;
   private _ptsRollover: number = 0;
-  private _lastPts: number = 0;
+  private _lastPts: Map<number, number> = new Map();
+  private _rolloverCounts: Map<number, number> = new Map();
 
   constructor() {
     this._aacStream = new AacStream();
@@ -43,7 +44,8 @@ export class TSDemuxer implements IDemuxer {
       this._flushPES();
       this._continuityCounters.clear();
       this._ptsRollover = 0;
-      this._lastPts = 0;
+      this._lastPts.clear();
+      this._rolloverCounts.clear();
       this._avcStream.flush(this);
       this._aacStream.flush(this);
     }
@@ -230,9 +232,11 @@ export class TSDemuxer implements IDemuxer {
     let dts = 0;
 
     if (ptsDtsFlag >= 2 && data.length >= 14) {
-      pts = this._normalizePTS(this._parsePTS(data, 9));
+      const rawPts = this._parsePTS(data, 9);
+      pts = this._normalizePTS(rawPts, pid);
       if (ptsDtsFlag === 3 && data.length >= 19) {
-        dts = this._normalizePTS(this._parsePTS(data, 14));
+        const rawDts = this._parsePTS(data, 14);
+        dts = this._normalizePTS(rawDts, pid);
       } else {
         dts = pts;
       }
@@ -262,18 +266,30 @@ export class TSDemuxer implements IDemuxer {
     );
   }
 
-  private _normalizePTS(rawPts: number): number {
-    const PTS_MAX = 0x1FFFFFFFF;
-    if (this._lastPts === 0) {
-      this._lastPts = rawPts;
-      return rawPts;
+  private _normalizePTS(rawPts: number, pid: number): number {
+    const PTS_CYCLE = 0x200000000;
+    let lastPts = this._lastPts.get(pid);
+    let count = this._rolloverCounts.get(pid) || 0;
+
+    if (lastPts !== undefined) {
+      const halfMax = 0x100000000;
+      if (rawPts < lastPts - halfMax) {
+        count++;
+      } else if (rawPts > lastPts + halfMax) {
+        count--;
+      }
+    } else {
+      // For a new PID, align its rollover count with the maximum seen so far
+      let maxCount = 0;
+      for (const c of this._rolloverCounts.values()) {
+        if (c > maxCount) maxCount = c;
+      }
+      count = maxCount;
     }
-    // Detect 33-bit overflow: if new PTS is much smaller than last, we've wrapped
-    if (rawPts < this._lastPts - (PTS_MAX >> 1)) {
-      this._ptsRollover += PTS_MAX + 1;
-    }
-    this._lastPts = rawPts;
-    return rawPts + this._ptsRollover;
+
+    this._lastPts.set(pid, rawPts);
+    this._rolloverCounts.set(pid, count);
+    return rawPts + count * PTS_CYCLE;
   }
 
   private _flushPESForPid(pid: number): void {
@@ -306,7 +322,7 @@ export class TSDemuxer implements IDemuxer {
         totalDuration += samples[i].duration;
       }
       const avgDuration = Math.round(totalDuration / (samples.length - 1));
-      samples[samples.length - 1].duration = avgDuration;
+      samples[samples.length - 1].duration = avgDuration > 0 ? avgDuration : 3003;
     }
 
     // Correct the last sample duration for audio
@@ -316,8 +332,9 @@ export class TSDemuxer implements IDemuxer {
       for (let i = 0; i < samples.length - 1; i++) {
         totalDuration += samples[i].duration;
       }
+      const defaultDuration = Math.round(1024 * 90000 / this._audioTrack.sampleRate);
       const avgDuration = Math.round(totalDuration / (samples.length - 1));
-      samples[samples.length - 1].duration = avgDuration;
+      samples[samples.length - 1].duration = avgDuration > 0 ? avgDuration : defaultDuration;
     }
   }
 
@@ -363,7 +380,10 @@ export class TSDemuxer implements IDemuxer {
     if (track.samples.length > 0) {
       const last = track.samples[track.samples.length - 1];
       last.duration = sample.dts - last.dts;
-      if (last.duration <= 0) last.duration = 3003; // Default ~29.97fps in 90kHz timescale
+      // Safety check: cap duration at 10 seconds to prevent extreme buffer ranges
+      if (last.duration <= 0 || last.duration > 900000) {
+        last.duration = 3003; // Default ~29.97fps
+      }
     }
     track.samples.push(sample);
   }
@@ -373,7 +393,11 @@ export class TSDemuxer implements IDemuxer {
     if (track.samples.length > 0) {
       const last = track.samples[track.samples.length - 1];
       last.duration = sample.dts - last.dts;
-      if (last.duration <= 0) last.duration = Math.round(1024 * 90000 / track.sampleRate);
+      // Safety check: cap duration to prevent extreme buffer ranges
+      const defaultDuration = Math.round(1024 * 90000 / track.sampleRate);
+      if (last.duration <= 0 || last.duration > 900000) {
+        last.duration = defaultDuration;
+      }
     }
     track.samples.push(sample);
   }
