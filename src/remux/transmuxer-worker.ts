@@ -19,7 +19,8 @@ ctx.onmessage = (e: MessageEvent<TransmuxerRequest>) => {
   
   switch (request.type) {
     case TransmuxerMessages.INIT:
-      // Initialization if needed
+      // Echo back INIT to confirm worker is ready
+      ctx.postMessage({ type: TransmuxerMessages.INIT, id: request.id });
       break;
       
     case TransmuxerMessages.DEMUX: {

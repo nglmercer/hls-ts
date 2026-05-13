@@ -32,6 +32,7 @@ export type LoaderCallbacks<T> = {
 
 export class PlaylistLoader {
   private _stats: LoaderStats;
+  private _abortController: AbortController | null = null;
 
   constructor() {
     this._stats = this._createStats();
@@ -42,10 +43,15 @@ export class PlaylistLoader {
   }
 
   load(context: LoaderContext, callbacks: LoaderCallbacks<string>): void {
+    // Abort any in-flight request before starting a new one
+    if (this._abortController) {
+      this._abortController.abort();
+    }
     this._stats = this._createStats();
     this._stats.trequest = performance.now();
 
     const controller = new AbortController();
+    this._abortController = controller;
     const timeout = setTimeout(() => {
       controller.abort();
       callbacks.onTimeout(this._stats, context);
@@ -80,6 +86,10 @@ export class PlaylistLoader {
 
   abort(): void {
     this._stats.aborted = true;
+    if (this._abortController) {
+      this._abortController.abort();
+      this._abortController = null;
+    }
   }
 
   private _createStats(): LoaderStats {

@@ -31,7 +31,7 @@ export class StreamController {
     this._levelController = levelController;
     this._abrController = abrController;
     this._fragmentLoader = new FragmentLoader();
-    this._transmuxer = new TransmuxerController();
+    this._transmuxer = new TransmuxerController(hls.config.enableWorker);
   }
 
   destroy(): void {
@@ -248,7 +248,7 @@ export class StreamController {
       if (this._currentFrag) {
         const loadedAhead = (this._currentFrag.start + this._currentFrag.duration) - currentTime;
         if (loadedAhead >= maxBuffer) {
-          this._checkBufferTimer = setTimeout(() => this._loadNextFragment(), 500);
+          this._checkBufferTimer = setTimeout(() => this._loadNextFragment(), 100);
           return;
         }
       }
@@ -260,13 +260,11 @@ export class StreamController {
         const furthestEnd = buffered.end(buffered.length - 1);
         const bufferLen = Math.max(0, furthestEnd - currentTime);
         if (bufferLen >= maxBuffer) {
-          this._checkBufferTimer = setTimeout(() => this._loadNextFragment(), 500);
+          this._checkBufferTimer = setTimeout(() => this._loadNextFragment(), 100);
           return;
         }
       }
     }
-
-    this.logger.log('Queue size', this._fragQueue.length);
     this._loading = true;
     this._doLoad();
   }

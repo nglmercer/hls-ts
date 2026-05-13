@@ -269,19 +269,11 @@ export class BufferController {
     this._retryData.set(type, null);
 
     try {
-      this._appending.set(type, true);
-      const u8 = new Uint8Array(data);
-      this.logger.log(`appendBuffer ${type}`, {
-        byteLength: data.byteLength,
-        first16: Array.from(u8.subarray(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(' '),
-      });
       if (data.byteLength === 0) {
-        this.logger.warn(`Skipping zero-length appendBuffer for ${type}`);
-        this._appending.set(type, false);
-        this._retryData.set(type, null);
         this._processQueue(type);
         return;
       }
+      this._appending.set(type, true);
       sb.appendBuffer(data);
     } catch (err) {
       const msg = (err as Error).message || '';

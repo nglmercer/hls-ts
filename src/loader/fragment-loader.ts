@@ -69,6 +69,7 @@ export class FragmentLoader {
     this._stats = this._createStats();
     this._stats.loading = true;
     this._stats.trequest = performance.now();
+    this._retryCount = 0;
     this._abortController = new AbortController();
 
     const timeout = setTimeout(() => {
