@@ -46,6 +46,7 @@ export class Remuxer {
   private _sequenceNumber: number = 0;
   private _nextAudioPts: number = -1;
   private _nextVideoPts: number = -1;
+  private logger = new Logger('Remuxer');
   private _startBaseDts: number = -1;
   private _videoTsOffset: number = -1;
   private _audioTsOffset: number = -1;
@@ -97,10 +98,10 @@ export class Remuxer {
       
       if (this._videoTsOffset === -1) {
         this._videoTsOffset = videoSamples[0].dts - this._startBaseDts;
-        Logger.log(`[Remuxer] initialized _videoTsOffset to ${this._videoTsOffset} (dts=${videoSamples[0].dts}, startBaseDts=${this._startBaseDts})`);
+        this.logger.log(`initialized _videoTsOffset to ${this._videoTsOffset} (dts=${videoSamples[0].dts}, startBaseDts=${this._startBaseDts})`);
       }
       const videoTfdt = videoSamples[0].dts - this._videoTsOffset;
-      Logger.log(`[Remuxer] videoTfdt=${videoTfdt} for frag baseDts=${baseDts}`);
+      this.logger.log(`videoTfdt=${videoTfdt} for frag baseDts=${baseDts}`);
 
       const { moof, mdat } = fragmentBox(mp4Track, mp4Samples, videoTfdt, ++this._sequenceNumber);
       result.videoData = concat(moof, mdat);
@@ -161,7 +162,7 @@ export class Remuxer {
   }
 
   reset(): void {
-    Logger.log('[Remuxer] reset() called');
+    this.logger.log('reset() called');
     this._videoTrack = undefined;
     this._audioTrack = undefined;
     this._initSent = false;

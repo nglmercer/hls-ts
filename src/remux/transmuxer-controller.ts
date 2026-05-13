@@ -1,5 +1,6 @@
 import { TransmuxerMessages, type TransmuxerRequest, type TransmuxerResponse } from './transmuxer-types';
 import { InlineTransmuxer } from './inline-transmuxer';
+import { Logger } from '../utils/logger';
 
 export class TransmuxerController {
   private _worker: Worker | null = null;
@@ -7,6 +8,7 @@ export class TransmuxerController {
   private _requestId = 0;
   private _callbacks: Map<number, (res: TransmuxerResponse) => void> = new Map();
   private _useWorker: boolean = false;
+  private logger = new Logger('TransmuxerController');
 
   constructor() {
     this._initWorker();
@@ -32,7 +34,7 @@ export class TransmuxerController {
       };
       this._useWorker = true;
     } catch (err) {
-      console.warn('[TransmuxerController] Worker unavailable, using inline transmuxer', err);
+      this.logger.warn('Worker unavailable, using inline transmuxer', err);
       this._inline = new InlineTransmuxer();
       this._useWorker = false;
     }

@@ -4,6 +4,7 @@ import type { Level, Fragment, LevelDetails, ManifestData } from '../types/level
 import { FragmentLoader } from '../loader/fragment-loader';
 import { TransmuxerController } from '../remux/transmuxer-controller';
 import { ErrorTypes, ErrorDetails, type HlsError, TrackTypes } from '../types';
+import { Logger } from '../utils/logger';
 import type { AbrController } from './abr-controller';
 import type { LevelController } from './level-controller';
 
@@ -23,6 +24,7 @@ export class StreamController {
   private _pendingData: ArrayBuffer | null = null;
   private _lastCC: Map<number, number> = new Map();
   private _checkBufferTimer: ReturnType<typeof setInterval> | null = null;
+  private logger = new Logger('StreamController');
 
   constructor(hls: Hls, levelController: LevelController, abrController: AbrController) {
     this.hls = hls;
@@ -264,7 +266,7 @@ _startLoading(): void {
       }
     }
 
-    console.log('Queue size', this._fragQueue.length);
+    this.logger.log('Queue size', this._fragQueue.length);
     this._loading = true;
     this._doLoad();
   }

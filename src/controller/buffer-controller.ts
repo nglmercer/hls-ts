@@ -2,6 +2,7 @@ import { Events } from '../types/events';
 import type { Hls } from '../core/Hls';
 import type { Level } from '../types/level';
 import { TrackTypes, SourceBufferModes, type TrackType, ErrorDetails, ErrorTypes, MediaSourceReadyStates, MediaSourceEvents, SourceBufferEvents, MimeTypes, DefaultCodecs } from '../types';
+import { Logger } from '../utils/logger';
 
 interface CodecInfo {
   videoCodec?: string;
@@ -21,6 +22,7 @@ export class BufferController {
   private _pendingCodecs: CodecInfo | null = null;
   private _evicting: boolean = false;
   private _retryData: ArrayBuffer | null = null;
+  private logger = new Logger('BufferController');
 
   constructor(hls: Hls) {
     this.hls = hls;
@@ -58,7 +60,7 @@ export class BufferController {
           try {
             this._mediaSource.duration = duration;
           } catch (e) {
-            console.warn('[BufferController] Failed to set duration:', e);
+            this.logger.warn('Failed to set duration:', e);
           }
         }
       }
@@ -161,8 +163,8 @@ export class BufferController {
     }
 
     const mime = `${MimeTypes.VIDEO_MP4}; codecs="${codecParts.join(',')}"`;
-    console.log(`[BufferController] Creating SourceBuffer with MIME: ${mime}`);
-    console.log(`[BufferController] isTypeSupported: ${MediaSource.isTypeSupported(mime)}`);
+    this.logger.log(`Creating SourceBuffer with MIME: ${mime}`);
+    this.logger.log(`isTypeSupported: ${MediaSource.isTypeSupported(mime)}`);
 
     try {
       if (MediaSource.isTypeSupported(mime)) {
@@ -177,7 +179,7 @@ export class BufferController {
           this._processQueue();
         });
         this._sourceBuffer.addEventListener(SourceBufferEvents.ERROR, (e) => {
-          console.error('[BufferController] SourceBuffer error', e);
+          this.logger.error('SourceBuffer error', e);
           this._appending = false;
           this._sourceBufferReady = false;
           this._queue = [];
@@ -190,10 +192,10 @@ export class BufferController {
         });
         this._processQueue();
       } else {
-        console.error(`[BufferController] MIME type not supported: ${mime}`);
+        this.logger.error(`MIME type not supported: ${mime}`);
       }
     } catch (err) {
-      console.error('[BufferController] Error creating SourceBuffer:', err);
+      this.logger.error('Error creating SourceBuffer:', err);
     }
   }
 
@@ -208,12 +210,12 @@ export class BufferController {
     try {
       this._appending = true;
       const u8 = new Uint8Array(data);
-      console.log('[BufferController] appendBuffer', {
+      this.logger.log('appendBuffer', {
         byteLength: data.byteLength,
         first16: Array.from(u8.subarray(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(' '),
       });
       if (data.byteLength === 0) {
-        console.warn('[BufferController] Skipping zero-length appendBuffer');
+        this.logger.warn('Skipping zero-length appendBuffer');
         this._appending = false;
         this._retryData = null;
         this._processQueue();
@@ -223,12 +225,12 @@ export class BufferController {
     } catch (err) {
       const msg = (err as Error).message || '';
       if (msg.includes('buffer') || msg.includes('Quota') || msg.includes('full')) {
-        console.warn('[BufferController] Buffer full, evicting old data');
+        this.logger.warn('Buffer full, evicting old data');
         this._retryData = data;
         this._appending = false;
         this._evictRange();
       } else {
-        console.error('[BufferController] appendBuffer error:', err);
+        this.logger.error('appendBuffer error:', err);
         this._appending = false;
         this._retryData = null;
       }
@@ -253,7 +255,7 @@ export class BufferController {
     const evictStart = buffered.start(0);
 
     if (evictEnd > evictStart + 0.5) {
-      console.log(`[BufferController] Evicting behind playhead: ${evictStart.toFixed(1)}s - ${evictEnd.toFixed(1)}s`);
+      this.logger.log(`Evicting behind playhead: ${evictStart.toFixed(1)}s - ${evictEnd.toFixed(1)}s`);
       this._evicting = true;
       try {
         this._sourceBuffer.remove(evictStart, evictEnd);
@@ -268,7 +270,7 @@ export class BufferController {
     const lastEnd = buffered.end(buffered.length - 1);
     if (lastEnd > currentTime + maxKeepAhead + 10) {
       const farStart = currentTime + maxKeepAhead;
-      console.log(`[BufferController] Evicting far-ahead data: ${farStart.toFixed(1)}s - ${lastEnd.toFixed(1)}s`);
+      this.logger.log(`Evicting far-ahead data: ${farStart.toFixed(1)}s - ${lastEnd.toFixed(1)}s`);
       this._evicting = true;
       try {
         this._sourceBuffer.remove(farStart, lastEnd);
@@ -279,7 +281,7 @@ export class BufferController {
     }
 
     // Nothing could be evicted — drop the pending data to avoid infinite loop
-    console.warn('[BufferController] No evictable range, dropping data');
+    this.logger.warn('No evictable range, dropping data');
     this._retryData = null;
   }
 

@@ -13,6 +13,7 @@ import { StreamController } from '../controller/stream-controller';
 import { AbrController, GapController } from '../controller/abr-controller';
 import { ErrorController } from '../controller/error-controller';
 import { CapLevelController } from '../controller/cap-level-controller';
+import { Logger } from '../utils/logger';
 
 interface ComponentAPI {
   destroy(): void;
@@ -23,7 +24,7 @@ export class Hls implements HlsEventEmitter {
 
   public readonly config: HlsConfig;
   public readonly userConfig: Partial<HlsConfig>;
-  public readonly logger: Console;
+  public readonly logger: Logger;
 
   private _emitter: EventEmitter = new EventEmitter();
   private _media: HTMLMediaElement | null = null;
@@ -41,7 +42,7 @@ export class Hls implements HlsEventEmitter {
   constructor(userConfig: Partial<HlsConfig> = {}) {
     this.userConfig = userConfig;
     this.config = { ...defaultConfig, ...(Hls.defaultConfig as Partial<HlsConfig> || {}), ...userConfig };
-    this.logger = console;
+    this.logger = new Logger('Hls');
     this.playlistLoader = new PlaylistLoader();
 
     this.abrController = new AbrController(this);
@@ -166,7 +167,7 @@ export class Hls implements HlsEventEmitter {
     this.trigger(Events.MANIFEST_LOADING, { url: this._url });
   }
 
-stopLoad(): void {
+  stopLoad(): void {
     // Basic stop logic
   }
 
