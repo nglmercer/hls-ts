@@ -19,6 +19,7 @@ import { AudioStreamController } from '../controller/audio-stream-controller';
 import { SubtitleStreamController } from '../controller/subtitle-stream-controller';
 import { MetadataController } from '../controller/metadata-controller';
 import { LatencyController } from '../controller/latency-controller';
+import { EMEController } from '../controller/eme-controller';
 import { Logger } from '../utils/logger';
 
 interface ComponentAPI {
@@ -50,6 +51,7 @@ export class Hls implements HlsEventEmitter {
   private subtitleStreamController: SubtitleStreamController;
   private metadataController: MetadataController;
   private latencyController: LatencyController;
+  private emeController: EMEController;
 
   constructor(userConfig: Partial<HlsConfig> = {}) {
     this.userConfig = userConfig;
@@ -67,6 +69,7 @@ export class Hls implements HlsEventEmitter {
     this.subtitleStreamController = new SubtitleStreamController(this);
     this.metadataController = new MetadataController(this);
     this.latencyController = new LatencyController(this);
+    this.emeController = new EMEController(this);
     this.bufferController = new BufferController(this);
     this.levelController = new LevelController(this, this.abrController);
     this.streamController = new StreamController(this, this.levelController, this.abrController);
@@ -85,6 +88,7 @@ export class Hls implements HlsEventEmitter {
       this.subtitleStreamController,
       this.metadataController,
       this.latencyController,
+      this.emeController,
     ];
 
     this._wireControllers();
@@ -322,6 +326,10 @@ export class Hls implements HlsEventEmitter {
     this.on(Events.MEDIA_ATTACHED, this.latencyController._onMediaAttached);
     this.on(Events.MEDIA_DETACHED, this.latencyController._onMediaDetached);
     this.on(Events.LEVEL_UPDATED, this.latencyController._onLevelUpdated);
+
+    this.on(Events.MEDIA_ATTACHED, this.emeController._onMediaAttached);
+    this.on(Events.MEDIA_DETACHED, this.emeController._onMediaDetached);
+    this.on(Events.MANIFEST_PARSED, this.emeController._onManifestParsed);
   }
 
   private _loadManifest(url: string): void {

@@ -34,6 +34,12 @@ export const Events = {
   DATERANGE_ENTERED: 'daterangeEntered',
   DATERANGE_EXITED: 'daterangeExited',
   METADATA_FOUND: 'metadataFound',
+  KEY_SYSTEM_ACCESS_SUPPORTED: 'keySystemAccessSupported',
+  KEY_SYSTEM_ACCESS_DENIED: 'keySystemAccessDenied',
+  MEDIA_KEY_SESSION_CREATED: 'mediaKeySessionCreated',
+  MEDIA_KEY_MESSAGE: 'mediaKeyMessage',
+  MEDIA_KEY_SESSION_UPDATED: 'mediaKeySessionUpdated',
+  MEDIA_KEY_ERROR: 'mediaKeyError',
   ERROR: 'hlsError',
   DESTROYING: 'hlsDestroying',
 } as const;

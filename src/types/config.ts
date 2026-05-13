@@ -31,6 +31,20 @@ export interface AbrConfig {
     abrMaxWithRealBitrate: boolean;
 }
 
+export interface DrmSystemConfig {
+  licenseUrl?: string;
+  serverCertificateUrl?: string;
+  headers?: Record<string, string>;
+  audioRobustness?: string;
+  videoRobustness?: string;
+}
+
+export interface DrmConfig {
+  widevine?: DrmSystemConfig;
+  fairplay?: DrmSystemConfig;
+  playready?: DrmSystemConfig;
+}
+
 export interface HlsConfig {
   debug: boolean;
   startLevel: number;
@@ -47,6 +61,7 @@ export interface HlsConfig {
   abrController: AbrConfig;
   startPosition: number;
   autoStartLoad: boolean;
+  drm?: DrmConfig;
 }
 
 export const defaultConfig: HlsConfig = {
@@ -88,4 +103,5 @@ export const defaultConfig: HlsConfig = {
   },
   startPosition: -1,
   autoStartLoad: true,
+  drm: {},
 };
