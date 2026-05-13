@@ -131,6 +131,7 @@ export class Hls implements HlsEventEmitter {
   destroy(): void {
     this.trigger(Events.DESTROYING, {});
     for (const comp of this.coreComponents) comp.destroy();
+    this.playlistLoader.abort();
     this._emitter.removeAllListeners();
     this._media = null;
     this._url = null;
@@ -329,6 +330,7 @@ export class Hls implements HlsEventEmitter {
                 subtitleTracks: result.subtitleTracks,
                 url: response.url,
               };
+
               this.trigger(Events.MANIFEST_LOADED, { data: response.data, ...manifest });
               this.trigger(Events.MANIFEST_PARSED, { ...manifest });
             } else if (response.data.includes('#EXTINF')) {

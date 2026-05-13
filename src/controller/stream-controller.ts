@@ -277,6 +277,7 @@ export class StreamController {
     }
 
     this._currentFrag = frag;
+    this.logger.log(`Loading fragment SN:${frag.sn} level:${frag.level} start:${frag.start.toFixed(3)}s`);
     this.hls.trigger(Events.FRAG_LOADING, { frag });
 
     this._fragmentLoader.load(
@@ -336,35 +337,46 @@ export class StreamController {
       // Append init segment first (contains ftyp + moov with all tracks)
       if (remuxResult.initSegment) {
         this.hls.trigger(Events.FRAG_PARSING_INIT_SEGMENT, { frag, tracks: remuxResult });
-        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.initSegment, type: TrackTypes.VIDEO });
-        // Also append init segment to audio if separate track exists
-        if (remuxResult.audioTrack) {
-          this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.initSegment, type: TrackTypes.AUDIO });
-        }
       }
 
       if (remuxResult.metadata) {
         this.hls.trigger(Events.FRAG_PARSING_METADATA, { frag, samples: remuxResult.metadata });
       }
 
+      // Batch init + media data into single appendBuffer calls to reduce append cycles.
+      // The MP4 spec allows ftyp+moov+moof+mdat in a single buffer.
+      const initSeg = remuxResult.initSegment;
+
       // Append media data. Prefer separate tracks if the demuxer/remuxer provided them.
       if (remuxResult.videoData) {
         this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.videoData, type: TrackTypes.VIDEO });
-        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.videoData, type: TrackTypes.VIDEO });
+        const videoPayload = initSeg
+          ? this._concatBuffers(initSeg, remuxResult.videoData)
+          : remuxResult.videoData;
+        this.hls.trigger(Events.BUFFER_APPENDING, { data: videoPayload, type: TrackTypes.VIDEO });
+      } else if (initSeg && !remuxResult.audioData && !remuxResult.data) {
+        // Init-only (no media data yet)
+        this.hls.trigger(Events.BUFFER_APPENDING, { data: initSeg, type: TrackTypes.VIDEO });
       }
 
       if (remuxResult.audioData) {
         // Only append audio from the video stream if we're not using an alternate audio track
         if (this.hls.audioTrack === -1) {
           this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.audioData, type: TrackTypes.AUDIO });
-          this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.audioData, type: TrackTypes.AUDIO });
+          const audioPayload = (initSeg && remuxResult.audioTrack)
+            ? this._concatBuffers(initSeg, remuxResult.audioData)
+            : remuxResult.audioData;
+          this.hls.trigger(Events.BUFFER_APPENDING, { data: audioPayload, type: TrackTypes.AUDIO });
         }
       }
 
       // Fallback for combined data if separate tracks aren't used
       if (!remuxResult.videoData && !remuxResult.audioData && remuxResult.data) {
         this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.data, type: TrackTypes.VIDEO });
-        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.data, type: TrackTypes.VIDEO });
+        const combinedPayload = initSeg
+          ? this._concatBuffers(initSeg, remuxResult.data)
+          : remuxResult.data;
+        this.hls.trigger(Events.BUFFER_APPENDING, { data: combinedPayload, type: TrackTypes.VIDEO });
       }
 
       this.hls.trigger(Events.FRAG_PARSED, { frag });
@@ -379,5 +391,12 @@ export class StreamController {
       };
       this.hls.trigger(Events.ERROR, error);
     }
+  }
+
+  private _concatBuffers(a: Uint8Array, b: Uint8Array): Uint8Array {
+    const result = new Uint8Array(a.length + b.length);
+    result.set(a, 0);
+    result.set(b, a.length);
+    return result;
   }
 }

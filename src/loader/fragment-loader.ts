@@ -55,6 +55,7 @@ export class FragmentLoader {
   }
 
   load(context: LoaderContext, callbacks: LoaderCallbacks): void {
+    this.abort();
     this._loadWithRetry(context, callbacks);
   }
 
