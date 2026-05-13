@@ -48,6 +48,7 @@ Explore the detailed documentation to learn more about `hls-ts`:
 - [**Configuration**](./docs/config.md) - Learn how to tune the player behavior.
 - [**Events**](./docs/events.md) - Complete list of events emitted by the player.
 - [**Architecture**](./docs/architecture.md) - Deep dive into the internal design and components.
+- [**hls-ts vs hls.js**](./docs/comparison.md) - How this library compares to the industry standard.
 
 ## 🤝 Contributing
 
