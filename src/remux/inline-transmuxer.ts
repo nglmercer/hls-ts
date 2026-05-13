@@ -1,10 +1,10 @@
 import { TSDemuxer } from './tsdemuxer';
 import { AACDemuxer } from './aac-demuxer';
 import { MP3Demuxer } from './mp3-demuxer';
-import { Remuxer } from './remuxer';
+import { Remuxer, type RemuxResult } from './remuxer';
 import { PassThroughRemuxer } from './passthrough-remuxer';
 import { CodecUtils } from '../utils/codecs';
-import type { TransmuxerResponse } from './transmuxer-types';
+import { TransmuxerMessages, type TransmuxerResponse } from './transmuxer-types';
 
 export class InlineTransmuxer {
   private _tsDemuxer: TSDemuxer;
@@ -22,7 +22,7 @@ export class InlineTransmuxer {
   }
 
   transmux(data: Uint8Array, timeOffset: number, baseDts: number, discontinuity: boolean, id: number): TransmuxerResponse {
-    let remuxResult;
+    let remuxResult: RemuxResult;
 
     if (discontinuity) {
       this._tsDemuxer.discontinuity = true;
@@ -43,7 +43,7 @@ export class InlineTransmuxer {
     }
 
     return {
-      type: 'result' as any,
+      type: TransmuxerMessages.RESULT,
       id,
       remuxResult,
     };

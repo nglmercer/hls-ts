@@ -2,7 +2,7 @@ import { Events } from '../types/events';
 import type { Hls } from '../core/Hls';
 import type { Level, LevelDetails, ManifestData, LevelParsed } from '../types/level';
 import { PlaylistLoader } from '../loader/playlist-loader';
-import { parseMediaPlaylist } from '../parser/m3u8-parser';
+import { parseMediaPlaylist, type PlaylistParseResult } from '../parser/m3u8-parser';
 import { ErrorTypes, ErrorDetails } from '../types/errors';
 import type { HlsError } from '../types/errors';
 import type { AbrController } from './abr-controller';
@@ -89,13 +89,13 @@ export class LevelController {
   };
 
   _onLevelLoading = (_data: { url: string }): void => { };
-
-  _onLevelLoaded = (data: { url: string; fragments: Record<string, unknown>[]; targetduration: number; live: boolean; type: string; initSegment: unknown }): void => {
+ 
+  _onLevelLoaded = (data: { url: string } & PlaylistParseResult): void => {
     const level = this._levels.find(l => l.url === data.url);
     if (!level) return;
 
     let totalDuration = 0;
-    const fragments = data.fragments.map((f: Record<string, unknown>) => {
+    const fragments = data.fragments.map((f) => {
       const frag = {
         url: f.url,
         sn: f.sn,
@@ -115,18 +115,19 @@ export class LevelController {
     });
 
     level.details = {
-      version: 1,
-      targetduration: Number(data.targetduration),
+      version: data.version,
+      targetduration: data.targetduration,
       totalduration: totalDuration,
-      startSN: Number(data.fragments[0]?.sn ?? 0),
-      endSN: Number(data.fragments[data.fragments.length - 1]?.sn ?? 0),
+      startSN: data.startSN,
+      endSN: data.endSN,
       fragStart: 0,
-      fragments: fragments as any[],
-      live: data.live as boolean,
-      type: data.type as string,
+      fragments: fragments,
+      live: data.live,
+      type: data.type,
       updated: Date.now(),
       advanced: false,
       availabilityDelay: 0,
+      dateranges: data.dateranges,
     };
 
     if (data.live && !this._livePollInterval) {

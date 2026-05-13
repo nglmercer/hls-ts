@@ -1,5 +1,5 @@
 import { PlaylistTypes, HlsTags } from '../types';
-import type { LevelParsed, MediaPlaylist } from '../types/level';
+import type { LevelParsed, MediaPlaylist, DateRange } from '../types/level';
 
 interface ParseResult {
   levels: LevelParsed[];
@@ -187,8 +187,8 @@ export function parseMediaPlaylist(data: string, baseurl: string): PlaylistParse
     } else if (line.startsWith(HlsTags.EXT_X_DATERANGE)) {
       const attrString = line.substring(HlsTags.EXT_X_DATERANGE.length);
       const attrs = parseAttributes(attrString);
-      const daterange: any = { attributes: {} };
-      
+      const daterange: Partial<DateRange> = { attributes: {} };
+
       for (const [key, value] of Object.entries(attrs)) {
         const k = key.toUpperCase();
         if (k === 'ID') daterange.id = value;
@@ -201,9 +201,9 @@ export function parseMediaPlaylist(data: string, baseurl: string): PlaylistParse
         else if (k === 'SCTE35-OUT') daterange.scte35Out = value;
         else if (k === 'SCTE35-IN') daterange.scte35In = value;
         else if (k === 'END-ON-NEXT') daterange.endOnNext = value === 'YES';
-        else daterange.attributes[key] = value;
+        else daterange.attributes![key] = value;
       }
-      dateranges.push(daterange);
+      dateranges.push(daterange as DateRange);
     }
   }
 
