@@ -12,16 +12,16 @@ interface CodecInfo {
 export class BufferController {
   private hls: Hls;
   private _mediaSource: MediaSource | null = null;
-  private _sourceBuffer: SourceBuffer | null = null;
+  private _sourceBuffers: Map<TrackType, SourceBuffer> = new Map();
   private _media: HTMLMediaElement | null = null;
   private _objectUrl: string = '';
   private _codecs: CodecInfo = {};
-  private _queue: ArrayBuffer[] = [];
-  private _appending: boolean = false;
+  private _queues: Map<TrackType, ArrayBuffer[]> = new Map();
+  private _appending: Map<TrackType, boolean> = new Map();
   private _sourceBufferReady: boolean = false;
   private _pendingCodecs: CodecInfo | null = null;
-  private _evicting: boolean = false;
-  private _retryData: ArrayBuffer | null = null;
+  private _evicting: Map<TrackType, boolean> = new Map();
+  private _retryData: Map<TrackType, ArrayBuffer | null> = new Map();
   private logger = new Logger('BufferController');
 
   constructor(hls: Hls) {
@@ -55,8 +55,8 @@ export class BufferController {
     if (this._mediaSource && this._mediaSource.readyState === MediaSourceReadyStates.OPEN) {
       if (!data.details.live && data.details.totalduration) {
         const duration = Number(data.details.totalduration);
-        // Only set duration if it's a valid positive number, different from current, and source buffer is not updating
-        if (!isNaN(duration) && duration > 0 && this._mediaSource.duration !== duration && (!this._sourceBuffer || !this._sourceBuffer.updating)) {
+        const updating = Array.from(this._sourceBuffers.values()).some(sb => sb.updating);
+        if (!isNaN(duration) && duration > 0 && this._mediaSource.duration !== duration && !updating) {
           try {
             this._mediaSource.duration = duration;
           } catch (e) {
@@ -77,30 +77,38 @@ export class BufferController {
   };
 
   _onBufferAppending = (data: { data: ArrayBuffer; type: TrackType }): void => {
-    this._queue.push(data.data);
-    this._processQueue();
+    const type = data.type || TrackTypes.VIDEO;
+    if (!this._queues.has(type)) this._queues.set(type, []);
+    this._queues.get(type)!.push(data.data);
+    this._processQueue(type);
   };
 
-  _onBufferFlushing = (data: { startOffset: number; endOffset: number }): void => {
-    if (!this._sourceBuffer) return;
-    if (this._sourceBuffer.updating) {
-      try { this._sourceBuffer.abort(); } catch { /* ignore */ }
-    }
-    try {
-      const end = (data.endOffset === Infinity && this._mediaSource) ? this._mediaSource.duration : data.endOffset;
-      if (end > data.startOffset) {
-        this._sourceBuffer.remove(data.startOffset, end);
+  _onBufferFlushing = (data: { startOffset: number; endOffset: number; type?: TrackType }): void => {
+    const types = data.type ? [data.type] : Array.from(this._sourceBuffers.keys());
+    for (const type of types) {
+      const sb = this._sourceBuffers.get(type);
+      if (!sb) continue;
+      if (sb.updating) {
+        try { sb.abort(); } catch { /* ignore */ }
       }
-    } catch { /* ignore */ }
+      try {
+        const end = (data.endOffset === Infinity && this._mediaSource) ? this._mediaSource.duration : data.endOffset;
+        if (end > data.startOffset) {
+          sb.remove(data.startOffset, end);
+        }
+      } catch { /* ignore */ }
+    }
   };
 
   _onBufferReset = (): void => {
-    this._queue = [];
-    this._retryData = null;
-    this._appending = false;
-    this._evicting = false;
-    if (this._sourceBuffer?.updating) {
-      try { this._sourceBuffer.abort(); } catch { /* ignore */ }
+    this._queues.clear();
+    this._retryData.clear();
+    this._appending.clear();
+    this._evicting.clear();
+    for (const sb of this._sourceBuffers.values()) {
+      if (sb.updating) {
+        try { sb.abort(); } catch { /* ignore */ }
+      }
     }
   };
 
@@ -130,8 +138,10 @@ export class BufferController {
   }
 
   private _cleanMediaSource(): void {
-    if (this._sourceBuffer && this._mediaSource?.readyState === MediaSourceReadyStates.OPEN) {
-      try { this._mediaSource.removeSourceBuffer(this._sourceBuffer); } catch { /* ignore */ }
+    if (this._mediaSource?.readyState === MediaSourceReadyStates.OPEN) {
+      for (const sb of this._sourceBuffers.values()) {
+        try { this._mediaSource.removeSourceBuffer(sb); } catch { /* ignore */ }
+      }
     }
 
     if (this._objectUrl) {
@@ -139,19 +149,19 @@ export class BufferController {
     }
 
     this._mediaSource = null;
-    this._sourceBuffer = null;
+    this._sourceBuffers.clear();
     this._objectUrl = '';
-    this._queue = [];
-    this._appending = false;
-    this._evicting = false;
-    this._retryData = null;
+    this._queues.clear();
+    this._appending.clear();
+    this._evicting.clear();
+    this._retryData.clear();
     this._sourceBufferReady = false;
     this._pendingCodecs = null;
   }
 
   private _createSourceBuffer(): void {
     if (!this._mediaSource || this._mediaSource.readyState !== MediaSourceReadyStates.OPEN) return;
-    if (this._sourceBuffer) return;
+    if (this._sourceBuffers.size > 0) return;
 
     // Build a combined MIME type for both video and audio
     const codecParts: string[] = [];
@@ -167,86 +177,100 @@ export class BufferController {
     this.logger.log(`isTypeSupported: ${MediaSource.isTypeSupported(mime)}`);
 
     try {
-      if (MediaSource.isTypeSupported(mime)) {
-        this._sourceBuffer = this._mediaSource.addSourceBuffer(mime);
-        this._sourceBuffer.mode = SourceBufferModes.SEGMENTS;
-        this._sourceBufferReady = true;
-        this._sourceBuffer.addEventListener(SourceBufferEvents.UPDATE_END, () => {
-          this._appending = false;
-          if (this._evicting) {
-            this._evicting = false;
-          }
-          this._processQueue();
-        });
-        this._sourceBuffer.addEventListener(SourceBufferEvents.ERROR, (e) => {
-          this.logger.error('SourceBuffer error', e);
-          this._appending = false;
-          this._sourceBufferReady = false;
-          this._queue = [];
-          this.hls.trigger(Events.ERROR, {
-            type: ErrorTypes.MEDIA_ERROR,
-            details: ErrorDetails.BUFFER_APPEND_ERROR,
-            fatal: true,
-            reason: 'SourceBuffer error during append',
+      const types = [TrackTypes.VIDEO, TrackTypes.AUDIO];
+      for (const type of types) {
+        let mime = '';
+        if (type === TrackTypes.VIDEO && this._codecs.videoCodec) {
+          mime = `${MimeTypes.VIDEO_MP4}; codecs="${this._codecs.videoCodec}"`;
+        } else if (type === TrackTypes.AUDIO && this._codecs.audioCodec) {
+          mime = `${MimeTypes.AUDIO_MP4}; codecs="${this._codecs.audioCodec}"`;
+        } else if (type === TrackTypes.VIDEO && !this._codecs.videoCodec && !this._codecs.audioCodec) {
+          // Fallback
+          mime = `${MimeTypes.VIDEO_MP4}; codecs="${DefaultCodecs.AVC}"`;
+        }
+
+        if (mime && MediaSource.isTypeSupported(mime) && !this._sourceBuffers.has(type)) {
+          const sb = this._mediaSource.addSourceBuffer(mime);
+          sb.mode = SourceBufferModes.SEGMENTS;
+          this._sourceBuffers.set(type, sb);
+          sb.addEventListener(SourceBufferEvents.UPDATE_END, () => {
+            this._appending.set(type, false);
+            this._evicting.set(type, false);
+            this._processQueue(type);
           });
-        });
-        this._processQueue();
-      } else {
-        this.logger.error(`MIME type not supported: ${mime}`);
+          sb.addEventListener(SourceBufferEvents.ERROR, (e) => {
+            this.logger.error(`SourceBuffer ${type} error`, e);
+            this._appending.set(type, false);
+            this._queues.set(type, []);
+            this.hls.trigger(Events.ERROR, {
+              type: ErrorTypes.MEDIA_ERROR,
+              details: ErrorDetails.BUFFER_APPEND_ERROR,
+              fatal: true,
+              reason: `SourceBuffer ${type} error during append`,
+            });
+          });
+        }
+      }
+      this._sourceBufferReady = true;
+      for (const type of this._sourceBuffers.keys()) {
+        this._processQueue(type);
       }
     } catch (err) {
       this.logger.error('Error creating SourceBuffer:', err);
     }
   }
 
-  private _processQueue(): void {
-    if (!this._sourceBuffer || !this._sourceBufferReady || this._appending || this._evicting) return;
-    if (this._sourceBuffer.updating || (this._media && this._media.error)) return;
+  private _processQueue(type: TrackType): void {
+    const sb = this._sourceBuffers.get(type);
+    if (!sb || !this._sourceBufferReady || this._appending.get(type) || this._evicting.get(type)) return;
+    if (sb.updating || (this._media && this._media.error)) return;
 
-    const data = this._retryData ?? (this._queue.length > 0 ? this._queue.shift()! : null);
+    const queue = this._queues.get(type) || [];
+    const data = this._retryData.get(type) ?? (queue.length > 0 ? queue.shift()! : null);
     if (!data) return;
-    this._retryData = null;
+    this._retryData.set(type, null);
 
     try {
-      this._appending = true;
+      this._appending.set(type, true);
       const u8 = new Uint8Array(data);
-      this.logger.log('appendBuffer', {
+      this.logger.log(`appendBuffer ${type}`, {
         byteLength: data.byteLength,
         first16: Array.from(u8.subarray(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(' '),
       });
       if (data.byteLength === 0) {
-        this.logger.warn('Skipping zero-length appendBuffer');
-        this._appending = false;
-        this._retryData = null;
-        this._processQueue();
+        this.logger.warn(`Skipping zero-length appendBuffer for ${type}`);
+        this._appending.set(type, false);
+        this._retryData.set(type, null);
+        this._processQueue(type);
         return;
       }
-      this._sourceBuffer.appendBuffer(data);
+      sb.appendBuffer(data);
     } catch (err) {
       const msg = (err as Error).message || '';
       if (msg.includes('buffer') || msg.includes('Quota') || msg.includes('full')) {
-        this.logger.warn('Buffer full, evicting old data');
-        this._retryData = data;
-        this._appending = false;
-        this._evictRange();
+        this.logger.warn(`Buffer ${type} full, evicting old data`);
+        this._retryData.set(type, data);
+        this._appending.set(type, false);
+        this._evictRange(type);
       } else {
-        this.logger.error('appendBuffer error:', err);
-        this._appending = false;
-        this._retryData = null;
+        this.logger.error(`appendBuffer ${type} error:`, err);
+        this._appending.set(type, false);
+        this._retryData.set(type, null);
       }
     }
   }
 
-  private _evictRange(): void {
-    if (!this._sourceBuffer || !this._media || this._sourceBuffer.updating) {
-      this._retryData = null;
+  private _evictRange(type: TrackType): void {
+    const sb = this._sourceBuffers.get(type);
+    if (!sb || !this._media || sb.updating) {
+      this._retryData.set(type, null);
       return;
     }
 
     const currentTime = this._media.currentTime;
-    const buffered = this._sourceBuffer.buffered;
+    const buffered = sb.buffered;
     if (buffered.length === 0) {
-      this._retryData = null;
+      this._retryData.set(type, null);
       return;
     }
 
@@ -255,13 +279,13 @@ export class BufferController {
     const evictStart = buffered.start(0);
 
     if (evictEnd > evictStart + 0.5) {
-      this.logger.log(`Evicting behind playhead: ${evictStart.toFixed(1)}s - ${evictEnd.toFixed(1)}s`);
-      this._evicting = true;
+      this.logger.log(`Evicting ${type} behind playhead: ${evictStart.toFixed(1)}s - ${evictEnd.toFixed(1)}s`);
+      this._evicting.set(type, true);
       try {
-        this._sourceBuffer.remove(evictStart, evictEnd);
+        sb.remove(evictStart, evictEnd);
         return; // updateend will retry the append via _processQueue
       } catch {
-        this._evicting = false;
+        this._evicting.set(type, false);
       }
     }
 
@@ -270,19 +294,19 @@ export class BufferController {
     const lastEnd = buffered.end(buffered.length - 1);
     if (lastEnd > currentTime + maxKeepAhead + 10) {
       const farStart = currentTime + maxKeepAhead;
-      this.logger.log(`Evicting far-ahead data: ${farStart.toFixed(1)}s - ${lastEnd.toFixed(1)}s`);
-      this._evicting = true;
+      this.logger.log(`Evicting ${type} far-ahead data: ${farStart.toFixed(1)}s - ${lastEnd.toFixed(1)}s`);
+      this._evicting.set(type, true);
       try {
-        this._sourceBuffer.remove(farStart, lastEnd);
+        sb.remove(farStart, lastEnd);
         return;
       } catch {
-        this._evicting = false;
+        this._evicting.set(type, false);
       }
     }
 
     // Nothing could be evicted — drop the pending data to avoid infinite loop
-    this.logger.warn('No evictable range, dropping data');
-    this._retryData = null;
+    this.logger.warn(`No evictable range for ${type}, dropping data`);
+    this._retryData.set(type, null);
   }
 
   private _parseCodecs(level: Level): CodecInfo {

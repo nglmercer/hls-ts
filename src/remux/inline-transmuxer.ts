@@ -30,7 +30,7 @@ export class InlineTransmuxer {
     }
 
     if (CodecUtils.isMP4(data)) {
-      remuxResult = this._passThroughRemuxer.remux(data);
+      remuxResult = this._passThroughRemuxer.remux(data, baseDts);
     } else if (data[0] === 0xff && (data[1] & 0xf0) === 0xf0) {
       const demuxResult = this._aacDemuxer.demux(data, timeOffset);
       remuxResult = this._remuxer.remux(demuxResult, baseDts);

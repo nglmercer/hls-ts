@@ -88,11 +88,11 @@ describe('BufferController - error paths', () => {
     const bc = new BufferController(hls);
 
     // Call processing without source buffer — should be no-op
-    (bc as any)._processQueue();
+    (bc as any)._processQueue(TrackTypes.VIDEO);
 
-    (bc as any)._appending = true;
-    (bc as any)._processQueue();
-    expect((bc as any)._appending).toBe(true);
+    (bc as any)._appending.set(TrackTypes.VIDEO, true);
+    (bc as any)._processQueue(TrackTypes.VIDEO);
+    expect((bc as any)._appending.get(TrackTypes.VIDEO)).toBe(true);
 
     bc.destroy();
   });
@@ -149,7 +149,7 @@ describe('ErrorController - retry setTimeout', () => {
       attachMedia: () => {},
     };
 
-    const ec = new ErrorController(hlsMock);
+    const ec = new ErrorController(hlsMock as any);
 
     for (let i = 0; i < 4; i++) {
       (ec as unknown as { _onError: (data: any) => void })._onError({
@@ -187,7 +187,7 @@ describe('ErrorController - retry setTimeout', () => {
       levels: [],
     };
 
-    const ec = new ErrorController(hlsMock);
+    const ec = new ErrorController(hlsMock as any);
     (ec as any)._onError({
       type: ErrorTypes.MEDIA_ERROR,
       details: ErrorDetails.BUFFER_APPEND_ERROR,
@@ -213,7 +213,7 @@ describe('ErrorController - retry setTimeout', () => {
       levels: [],
     };
 
-    const ec = new ErrorController(hlsMock);
+    const ec = new ErrorController(hlsMock as any);
     (ec as any)._onError({
       type: ErrorTypes.MEDIA_ERROR,
       details: 'bufferAppendError',

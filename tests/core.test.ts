@@ -37,8 +37,8 @@ describe('EventEmitter', () => {
   it('should remove all listeners', () => {
     const ee = new EventEmitter();
     let count = 0;
-    ee.on('a', () => count++);
-    ee.on('b', () => count++);
+    ee.on('a', () => { count++; });
+    ee.on('b', () => { count++; });
     ee.removeAllListeners();
     ee.emit('a');
     ee.emit('b');
@@ -48,7 +48,7 @@ describe('EventEmitter', () => {
 
 describe('Hls', () => {
   it('should create instance with default config', () => {
-    const hls = new Hls();
+    const hls = new Hls() as any;
     expect(hls.config).toBeDefined();
     expect(hls.config.debug).toBe(false);
   });
@@ -65,7 +65,7 @@ describe('Hls', () => {
   });
 
   it('should trigger events on loadSource', () => {
-    const hls = new Hls();
+    const hls = new Hls() as any;
     let manifestLoading = false;
     hls.on('manifestLoading', () => { manifestLoading = true; });
     hls.loadSource('https://example.com/manifest.m3u8');

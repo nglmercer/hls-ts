@@ -27,7 +27,7 @@ describe('ErrorController - edge cases', () => {
   });
 
   it('should handle network error with frag url and trigger retry', () => {
-    const ec = new ErrorController(mockHls);
+    const ec = new ErrorController(mockHls as any);
     let triggered = false;
 
     mockHls.trigger = (event: string) => {
@@ -47,7 +47,7 @@ describe('ErrorController - edge cases', () => {
   });
 
   it('should handle network error without frag url (no retry)', () => {
-    const ec = new ErrorController(mockHls);
+    const ec = new ErrorController(mockHls as any);
     (ec as unknown as { _onError: (data: any) => void })._onError({
       type: ErrorTypes.NETWORK_ERROR,
       details: 'manifestLoadError',
@@ -70,7 +70,7 @@ describe('ErrorController - edge cases', () => {
     mockHls.detachMedia = () => { detached = true; };
     mockHls.attachMedia = (m: any) => { attached = true; };
 
-    const ec = new ErrorController(mockHls);
+    const ec = new ErrorController(mockHls as any);
 
     (ec as unknown as { _onError: (data: any) => void })._onError({
       type: ErrorTypes.MEDIA_ERROR,
@@ -89,7 +89,7 @@ describe('ErrorController - edge cases', () => {
     mockHls.detachMedia = () => { detached = true; };
     mockHls.attachMedia = () => {};
 
-    const ec = new ErrorController(mockHls);
+    const ec = new ErrorController(mockHls as any);
     (ec as unknown as { _onError: (data: any) => void })._onError({
       type: ErrorTypes.MEDIA_ERROR,
       details: 'bufferAppendError',
@@ -106,7 +106,7 @@ describe('ErrorController - edge cases', () => {
       if (event === 'levelSwitching') switchedLevel = data.level;
     };
 
-    const ec = new ErrorController(mockHls);
+    const ec = new ErrorController(mockHls as any);
     (ec as unknown as { _onError: (data: any) => void })._onError({
       type: ErrorTypes.MUX_ERROR,
       details: 'fragParsingError',
@@ -121,7 +121,7 @@ describe('ErrorController - edge cases', () => {
 
   it('should handle mux error with single level (no fallback)', () => {
     mockHls.levels = [{ id: 0 }];
-    const ec = new ErrorController(mockHls);
+    const ec = new ErrorController(mockHls as any);
     (ec as unknown as { _onError: (data: any) => void })._onError({
       type: ErrorTypes.MUX_ERROR,
       details: 'fragParsingError',
@@ -133,7 +133,7 @@ describe('ErrorController - edge cases', () => {
   });
 
   it('should handle mux error without frag level', () => {
-    const ec = new ErrorController(mockHls);
+    const ec = new ErrorController(mockHls as any);
     (ec as unknown as { _onError: (data: any) => void })._onError({
       type: ErrorTypes.MUX_ERROR,
       details: 'fragParsingError',

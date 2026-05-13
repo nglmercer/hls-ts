@@ -22,7 +22,7 @@ describe('ErrorTypes', () => {
 describe('ErrorController', () => {
   it('should create and destroy', () => {
     const hlsMock = { config: { fragLoadPolicy: { errorRetry: { maxNumRetry: 3 } } }, url: 'http://example.com', levels: [{ id: 0 }], media: null, trigger: () => {}, detachMedia: () => {}, attachMedia: () => {} };
-    const ec = new ErrorController(hlsMock);
+    const ec = new ErrorController(hlsMock as any);
     ec.destroy();
   });
 
@@ -37,7 +37,7 @@ describe('ErrorController', () => {
       detachMedia: () => {},
       attachMedia: () => {},
     };
-    const ec = new ErrorController(hlsMock);
+    const ec = new ErrorController(hlsMock as any);
 
     (ec as unknown as { _onError: (data: any) => void })._onError({
       type: ErrorTypes.NETWORK_ERROR,
@@ -60,7 +60,7 @@ describe('ErrorController', () => {
       attachMedia: (m: any) => { attached = true; },
       levels: [],
     };
-    const ec = new ErrorController(hlsMock);
+    const ec = new ErrorController(hlsMock as any);
 
     (ec as unknown as { _onError: (data: any) => void })._onError({
       type: ErrorTypes.MEDIA_ERROR,

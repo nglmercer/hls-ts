@@ -36,14 +36,14 @@ describe('PassThroughRemuxer', () => {
   it('should pass through fMP4 data', () => {
     const remuxer = new PassThroughRemuxer();
     const fmp4 = new Uint8Array([0, 0, 0, 20, 0x6d, 0x6f, 0x6f, 0x66, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-    const result = remuxer.remux(fmp4);
+    const result = remuxer.remux(fmp4, 0);
     expect(result.data).toBe(fmp4);
   });
 
   it('should return empty for non-MP4 data', () => {
     const remuxer = new PassThroughRemuxer();
     const ts = new Uint8Array([0x47, 0, 0, 0x10]);
-    const result = remuxer.remux(ts);
+    const result = remuxer.remux(ts, 0);
     expect(result.data).toBeUndefined();
   });
 });

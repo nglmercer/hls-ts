@@ -7,7 +7,7 @@ interface ParseResult {
   subtitleTracks: MediaPlaylist[];
 }
 
-interface PlaylistParseResult {
+export interface PlaylistParseResult {
   fragments: Array<{
     sn: number;
     duration: number;
@@ -17,6 +17,7 @@ interface PlaylistParseResult {
     byteRangeEnd: number;
     programDateTime: number;
     tagList: string[][];
+    initSegment: { url: string; byteRangeStart: number; byteRangeEnd: number } | null;
   }>;
   targetduration: number;
   version: number;
@@ -160,6 +161,7 @@ export function parseMediaPlaylist(data: string, baseurl: string): PlaylistParse
         byteRangeEnd: byteEnd,
         programDateTime: currentProgramDateTime,
         tagList: [...tagList],
+        initSegment: initSegment,
       });
       startTime += currentDuration;
       sn++;

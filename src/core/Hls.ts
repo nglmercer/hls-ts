@@ -2,7 +2,7 @@ import { EventEmitter, type HlsEventEmitter } from './EventEmitter';
 import type { EventHandler } from './EventEmitter';
 import { Events } from '../types/events';
 import { defaultConfig, type HlsConfig } from '../types/config';
-import type { ManifestData, Level } from '../types/level';
+import type { ManifestData, Level, MediaPlaylist } from '../types/level';
 import { PlaylistLoader } from '../loader/playlist-loader';
 import { parseMasterPlaylist, parseMediaPlaylist } from '../parser/m3u8-parser';
 import { ErrorTypes, ErrorDetails } from '../types/errors';
@@ -13,6 +13,10 @@ import { StreamController } from '../controller/stream-controller';
 import { AbrController, GapController } from '../controller/abr-controller';
 import { ErrorController } from '../controller/error-controller';
 import { CapLevelController } from '../controller/cap-level-controller';
+import { AudioTrackController } from '../controller/audio-track-controller';
+import { SubtitleTrackController } from '../controller/subtitle-track-controller';
+import { AudioStreamController } from '../controller/audio-stream-controller';
+import { SubtitleStreamController } from '../controller/subtitle-stream-controller';
 import { Logger } from '../utils/logger';
 
 interface ComponentAPI {
@@ -38,6 +42,10 @@ export class Hls implements HlsEventEmitter {
   private gapController: GapController;
   private errorController: ErrorController;
   private capLevelController: CapLevelController;
+  private audioTrackController: AudioTrackController;
+  private subtitleTrackController: SubtitleTrackController;
+  private audioStreamController: AudioStreamController;
+  private subtitleStreamController: SubtitleStreamController;
 
   constructor(userConfig: Partial<HlsConfig> = {}) {
     this.userConfig = userConfig;
@@ -49,6 +57,10 @@ export class Hls implements HlsEventEmitter {
     this.gapController = new GapController();
     this.errorController = new ErrorController(this);
     this.capLevelController = new CapLevelController(this);
+    this.audioTrackController = new AudioTrackController(this);
+    this.subtitleTrackController = new SubtitleTrackController(this);
+    this.audioStreamController = new AudioStreamController(this);
+    this.subtitleStreamController = new SubtitleStreamController(this);
     this.bufferController = new BufferController(this);
     this.levelController = new LevelController(this, this.abrController);
     this.streamController = new StreamController(this, this.levelController, this.abrController);
@@ -61,6 +73,10 @@ export class Hls implements HlsEventEmitter {
       this.gapController,
       this.errorController,
       this.capLevelController,
+      this.audioTrackController,
+      this.subtitleTrackController,
+      this.audioStreamController,
+      this.subtitleStreamController,
     ];
 
     this._wireControllers();
@@ -145,11 +161,27 @@ export class Hls implements HlsEventEmitter {
   }
 
   get audioTrack(): number {
-    return -1; // Placeholder for now
+    return this.audioTrackController.audioTrack;
   }
 
   set audioTrack(trackId: number) {
-    // Placeholder
+    this.audioTrackController.audioTrack = trackId;
+  }
+
+  get audioTracks(): MediaPlaylist[] {
+    return this.audioTrackController.audioTracks;
+  }
+
+  get subtitleTrack(): number {
+    return this.subtitleTrackController.subtitleTrack;
+  }
+
+  set subtitleTrack(trackId: number) {
+    this.subtitleTrackController.subtitleTrack = trackId;
+  }
+
+  get subtitleTracks(): MediaPlaylist[] {
+    return this.subtitleTrackController.subtitleTracks;
   }
 
   get bandwidthEstimate(): number {
@@ -261,6 +293,17 @@ export class Hls implements HlsEventEmitter {
     this.on(Events.MEDIA_ATTACHED, cc._onMediaAttached);
     this.on(Events.MEDIA_DETACHED, cc._onMediaDetached);
     this.on(Events.MANIFEST_PARSED, cc._onManifestParsed);
+
+    this.on(Events.MANIFEST_PARSED, this.audioTrackController._onManifestParsed);
+    this.on(Events.MANIFEST_PARSED, this.subtitleTrackController._onManifestParsed);
+
+    this.on(Events.MEDIA_ATTACHED, this.audioStreamController._onMediaAttached);
+    this.on(Events.MEDIA_DETACHED, this.audioStreamController._onMediaDetached);
+    this.on(Events.AUDIO_TRACK_SWITCHING, this.audioStreamController._onAudioTrackSwitching);
+
+    this.on(Events.MEDIA_ATTACHED, this.subtitleStreamController._onMediaAttached);
+    this.on(Events.MEDIA_DETACHED, this.subtitleStreamController._onMediaDetached);
+    this.on(Events.SUBTITLE_TRACK_SWITCH, this.subtitleStreamController._onSubtitleTrackSwitch);
   }
 
   private _loadManifest(url: string): void {

@@ -33,7 +33,7 @@ ctx.onmessage = (e: MessageEvent<TransmuxerRequest>) => {
       }
 
       if (CodecUtils.isMP4(data)) {
-        remuxResult = passThroughRemuxer.remux(data);
+        remuxResult = passThroughRemuxer.remux(data, request.baseDts || 0);
       } else if (data[0] === 0xff && (data[1] & 0xf0) === 0xf0) {
         // Potential AAC ADTS
         const demuxResult = aacDemuxer.demux(data, request.timeOffset || 0);

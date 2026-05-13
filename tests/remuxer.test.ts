@@ -11,7 +11,7 @@ describe('Remuxer', () => {
 
   it('should return empty result for empty demux input', () => {
     const remuxer = new Remuxer();
-    const result = remuxer.remux({});
+    const result = remuxer.remux({}, 0);
     expect(result.initSegment).toBeUndefined();
     expect(result.data).toBeUndefined();
   });
@@ -128,10 +128,10 @@ describe('Remuxer', () => {
       },
     };
 
-    const r1 = remuxer.remux(demuxResult);
+    const r1 = remuxer.remux(demuxResult, 0);
     expect(r1.initSegment).toBeDefined();
 
-    const r2 = remuxer.remux(demuxResult);
+    const r2 = remuxer.remux(demuxResult, 0);
     expect(r2.initSegment).toBeUndefined();
   });
 
@@ -180,7 +180,7 @@ describe('Remuxer', () => {
       },
     };
 
-    const result = remuxer.remux(demuxResult);
+    const result = remuxer.remux(demuxResult, 0);
     expect(result.videoData).toBeDefined();
   });
 });

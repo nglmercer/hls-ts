@@ -1,7 +1,7 @@
 import type { RemuxResult } from './remuxer';
 
 export class PassThroughRemuxer {
-  remux(data: Uint8Array): RemuxResult {
+  remux(data: Uint8Array, baseDts: number): RemuxResult {
     // Check if it's actually an MP4 fragment (starts with 'ftyp' or 'moof')
     const type = this._getBoxType(data, 4);
     if (type === 'ftyp' || type === 'moof' || type === 'styp') {

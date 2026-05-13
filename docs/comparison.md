@@ -14,8 +14,8 @@ This document provides a comparison between `hls-ts` and the industry-standard `
 | **HEVC (H.265)** | ✅ Supported | ✅ Supported |
 | **Adaptive Bitrate** | ✅ EWMA Based | ✅ Advanced Throughput Estimation |
 | **Web Workers** | ✅ Native Support | ✅ Native Support |
-| **Multi-Audio** | ❌ (Parsing only) | ✅ Full Support |
-| **Subtitles** | ⚠️ CEA-608 Only | ✅ WebVTT, CEA-608/708, IMSC1 |
+| **Multi-Audio** | ✅ Supported | ✅ Full Support |
+| **Subtitles** | ✅ WebVTT & CEA-608 | ✅ WebVTT, CEA-608/708, IMSC1 |
 | **DRM (Widevine/etc)** | ❌ Not Supported | ✅ Full EME Support |
 | **LL-HLS** | ❌ Not Supported | ✅ Full Support |
 | **Ad-Metadata (SCTE)** | ❌ Not Supported | ✅ Full Support |

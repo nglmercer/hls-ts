@@ -46,19 +46,19 @@ describe('EWMA', () => {
 describe('AbrController', () => {
   it('should create with default state', () => {
     const hlsMock = { config: { abrController: { abrEwmaFastVoD: 3, abrEwmaSlowVoD: 9 } } };
-    const abr = new AbrController(hlsMock);
+    const abr = new AbrController(hlsMock as any);
     expect(abr.bwEstimate).toBe(0);
   });
 
   it('should select level 0 when no levels', () => {
     const hlsMock = { config: { abrController: { abrEwmaFastVoD: 3, abrEwmaSlowVoD: 9 } } };
-    const abr = new AbrController(hlsMock);
+    const abr = new AbrController(hlsMock as any);
     expect(abr.getNextLevel(1000000)).toBe(0);
   });
 
   it('should select appropriate level based on bandwidth', () => {
     const hlsMock = { config: { abrController: { abrEwmaFastVoD: 3, abrEwmaSlowVoD: 9 } } };
-    const abr = new AbrController(hlsMock);
+    const abr = new AbrController(hlsMock as any);
 
     (abr as unknown as { _onManifestParsed: (data: { levels: any[] }) => void })._onManifestParsed({
       levels: [
@@ -88,7 +88,7 @@ describe('AbrController', () => {
         },
       },
     };
-    const abr = new AbrController(hlsMock);
+    const abr = new AbrController(hlsMock as any);
 
     const now = performance.now();
     (abr as unknown as { _onFragLoaded: (data: { frag: any; stats: any }) => void })._onFragLoaded({
