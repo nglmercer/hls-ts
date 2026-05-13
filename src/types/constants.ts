@@ -46,3 +46,32 @@ export const HlsTags = {
   EXT_X_BYTERANGE: '#EXT-X-BYTERANGE:',
   EXT_X_PROGRAM_DATE_TIME: '#EXT-X-PROGRAM-DATE-TIME:',
 } as const;
+
+export const MediaSourceReadyStates = {
+  OPEN: 'open',
+  CLOSED: 'closed',
+  ENDED: 'ended',
+} as const;
+
+export const MediaSourceEvents = {
+  SOURCE_OPEN: 'sourceopen',
+  SOURCE_ENDED: 'sourceended',
+  SOURCE_CLOSE: 'sourceclose',
+} as const;
+
+export const SourceBufferEvents = {
+  UPDATE_END: 'updateend',
+  UPDATE_START: 'updatestart',
+  UPDATE: 'update',
+  ERROR: 'error',
+  ABORT: 'abort',
+} as const;
+
+export const MimeTypes = {
+  VIDEO_MP4: 'video/mp4',
+  AUDIO_MP4: 'audio/mp4',
+} as const;
+
+export const DefaultCodecs = {
+  AVC: 'avc1.42e01e',
+} as const;

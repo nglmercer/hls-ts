@@ -100,7 +100,7 @@ export class BufferController {
         this._codecs = this._pendingCodecs;
         this._pendingCodecs = null;
       }
-      
+
       // Only create if we actually have codecs, otherwise wait for _onBufferCodecs
       if (this._codecs.videoCodec || this._codecs.audioCodec) {
         this._createSourceBuffer();

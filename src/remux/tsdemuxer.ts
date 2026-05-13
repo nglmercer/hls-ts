@@ -297,6 +297,28 @@ export class TSDemuxer implements IDemuxer {
     this._avcStream.flush(this);
     this._hevcStream.flush(this);
     this._aacStream.flush(this);
+
+    // Correct the last sample duration for video
+    if (this._videoTrack && this._videoTrack.samples.length > 1) {
+      const samples = this._videoTrack.samples;
+      let totalDuration = 0;
+      for (let i = 0; i < samples.length - 1; i++) {
+        totalDuration += samples[i].duration;
+      }
+      const avgDuration = Math.round(totalDuration / (samples.length - 1));
+      samples[samples.length - 1].duration = avgDuration;
+    }
+
+    // Correct the last sample duration for audio
+    if (this._audioTrack && this._audioTrack.samples.length > 1) {
+      const samples = this._audioTrack.samples;
+      let totalDuration = 0;
+      for (let i = 0; i < samples.length - 1; i++) {
+        totalDuration += samples[i].duration;
+      }
+      const avgDuration = Math.round(totalDuration / (samples.length - 1));
+      samples[samples.length - 1].duration = avgDuration;
+    }
   }
 
   private _initVideoTrack(): DemuxedVideoTrack {

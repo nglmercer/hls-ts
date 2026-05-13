@@ -1,6 +1,7 @@
 import type { DemuxResult, DemuxedVideoTrack, DemuxedAudioTrack } from './tsdemuxer';
 import { initSegment, fragmentBox, type MP4Track, type MP4Sample } from './mp4-generator';
 import { TrackTypes, type TrackType } from '../types';
+import { Logger } from '../utils/logger';
 
 export interface RemuxResult {
   initSegment?: Uint8Array;
@@ -46,6 +47,8 @@ export class Remuxer {
   private _nextAudioPts: number = -1;
   private _nextVideoPts: number = -1;
   private _startBaseDts: number = -1;
+  private _videoTsOffset: number = -1;
+  private _audioTsOffset: number = -1;
 
   remux(demuxResult: DemuxResult, baseDts: number): RemuxResult {
     if (this._startBaseDts === -1) {
@@ -92,11 +95,12 @@ export class Remuxer {
       const mp4Track = this._toMP4Track(track);
       const mp4Samples = videoSamples.map(s => this._toMP4Sample(s));
       
-      // Use the continuous _nextVideoPts, or the anchor _startBaseDts if this is the first sample
-      let videoTfdt = this._startBaseDts;
-      if (this._nextVideoPts >= 0) {
-        videoTfdt = this._nextVideoPts;
+      if (this._videoTsOffset === -1) {
+        this._videoTsOffset = videoSamples[0].dts - this._startBaseDts;
+        Logger.log(`[Remuxer] initialized _videoTsOffset to ${this._videoTsOffset} (dts=${videoSamples[0].dts}, startBaseDts=${this._startBaseDts})`);
       }
+      const videoTfdt = videoSamples[0].dts - this._videoTsOffset;
+      Logger.log(`[Remuxer] videoTfdt=${videoTfdt} for frag baseDts=${baseDts}`);
 
       const { moof, mdat } = fragmentBox(mp4Track, mp4Samples, videoTfdt, ++this._sequenceNumber);
       result.videoData = concat(moof, mdat);
@@ -110,10 +114,12 @@ export class Remuxer {
       const mp4Track = this._toMP4Track(track);
       let mp4Samples = audioSamples.map(s => this._toMP4Sample(s));
 
-      let audioTfdt = this._startBaseDts;
+      if (this._audioTsOffset === -1) {
+        this._audioTsOffset = audioSamples[0].dts - this._startBaseDts;
+      }
+      const audioTfdt = audioSamples[0].dts - this._audioTsOffset;
+      
       if (this._nextAudioPts >= 0) {
-        audioTfdt = this._nextAudioPts;
-        
         // Insert silence for significant gaps to catch up to the expected timeline
         const gap = baseDts - this._nextAudioPts;
         if (gap > 3000 && gap < 90000) {
@@ -155,6 +161,7 @@ export class Remuxer {
   }
 
   reset(): void {
+    Logger.log('[Remuxer] reset() called');
     this._videoTrack = undefined;
     this._audioTrack = undefined;
     this._initSent = false;
@@ -163,6 +170,8 @@ export class Remuxer {
     this._nextAudioPts = -1;
     this._nextVideoPts = -1;
     this._startBaseDts = -1;
+    this._videoTsOffset = -1;
+    this._audioTsOffset = -1;
   }
 
   private _remuxVideo(track: DemuxedVideoTrack): void {
