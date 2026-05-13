@@ -45,6 +45,7 @@ export const HlsTags = {
   EXTINF: '#EXTINF:',
   EXT_X_BYTERANGE: '#EXT-X-BYTERANGE:',
   EXT_X_PROGRAM_DATE_TIME: '#EXT-X-PROGRAM-DATE-TIME:',
+  EXT_X_DATERANGE: '#EXT-X-DATERANGE:',
 } as const;
 
 export const MediaSourceReadyStates = {

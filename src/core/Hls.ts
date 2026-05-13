@@ -17,6 +17,7 @@ import { AudioTrackController } from '../controller/audio-track-controller';
 import { SubtitleTrackController } from '../controller/subtitle-track-controller';
 import { AudioStreamController } from '../controller/audio-stream-controller';
 import { SubtitleStreamController } from '../controller/subtitle-stream-controller';
+import { MetadataController } from '../controller/metadata-controller';
 import { Logger } from '../utils/logger';
 
 interface ComponentAPI {
@@ -46,6 +47,7 @@ export class Hls implements HlsEventEmitter {
   private subtitleTrackController: SubtitleTrackController;
   private audioStreamController: AudioStreamController;
   private subtitleStreamController: SubtitleStreamController;
+  private metadataController: MetadataController;
 
   constructor(userConfig: Partial<HlsConfig> = {}) {
     this.userConfig = userConfig;
@@ -61,6 +63,7 @@ export class Hls implements HlsEventEmitter {
     this.subtitleTrackController = new SubtitleTrackController(this);
     this.audioStreamController = new AudioStreamController(this);
     this.subtitleStreamController = new SubtitleStreamController(this);
+    this.metadataController = new MetadataController(this);
     this.bufferController = new BufferController(this);
     this.levelController = new LevelController(this, this.abrController);
     this.streamController = new StreamController(this, this.levelController, this.abrController);
@@ -77,6 +80,7 @@ export class Hls implements HlsEventEmitter {
       this.subtitleTrackController,
       this.audioStreamController,
       this.subtitleStreamController,
+      this.metadataController,
     ];
 
     this._wireControllers();
@@ -304,6 +308,10 @@ export class Hls implements HlsEventEmitter {
     this.on(Events.MEDIA_ATTACHED, this.subtitleStreamController._onMediaAttached);
     this.on(Events.MEDIA_DETACHED, this.subtitleStreamController._onMediaDetached);
     this.on(Events.SUBTITLE_TRACK_SWITCH, this.subtitleStreamController._onSubtitleTrackSwitch);
+
+    this.on(Events.MEDIA_ATTACHED, this.metadataController._onMediaAttached);
+    this.on(Events.MEDIA_DETACHED, this.metadataController._onMediaDetached);
+    this.on(Events.LEVEL_UPDATED, this.metadataController._onLevelUpdated);
   }
 
   private _loadManifest(url: string): void {

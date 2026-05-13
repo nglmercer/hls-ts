@@ -18,7 +18,7 @@ This document provides a comparison between `hls-ts` and the industry-standard `
 | **Subtitles** | ✅ WebVTT & CEA-608 | ✅ WebVTT, CEA-608/708, IMSC1 |
 | **DRM (Widevine/etc)** | ❌ Not Supported | ✅ Full EME Support |
 | **LL-HLS** | ❌ Not Supported | ✅ Full Support |
-| **Ad-Metadata (SCTE)** | ❌ Not Supported | ✅ Full Support |
+| **Ad-Metadata (SCTE)** | ⚠️ (Parsing only) | ✅ Full Support |
 
 ## Key Differences
 
@@ -31,19 +31,39 @@ This document provides a comparison between `hls-ts` and the industry-standard `
 ### 3. Modern Browser Support
 `hls-ts` targets modern browsers with robust MSE implementations. Unlike `hls.js`, it doesn't include the extensive list of "quirk fixes" for older browser versions or specific edge cases found in legacy MSE implementations.
 
-## Missing Features in `hls-ts`
+## Advanced Features Breakdown
+
+### 1. Digital Rights Management (DRM)
+DRM is used to protect premium content from unauthorized copying. In the browser, this is handled via **Encrypted Media Extensions (EME)**.
+- **Widevine**: Used by Chrome, Firefox, and Android.
+- **FairPlay**: Apple's proprietary DRM for Safari and iOS.
+- **PlayReady**: Microsoft's DRM used in Edge and Windows.
+`hls.js` provides a complex `EMEController` to manage license requests, key rotation, and CDM (Content Decryption Module) communication. `hls-ts` currently does not support encrypted streams.
+
+### 2. Low-Latency HLS (LL-HLS)
+Standard HLS has a latency of 10-30 seconds. LL-HLS reduces this to **less than 3 seconds** by using:
+- **Partial Segments**: Breaking standard segments into tiny chunks (L-segments).
+- **Preload Hints**: Telling the player where the next data will be before it's ready.
+- **Blocking Requests**: The server holds the request until the data is available.
+Implementing LL-HLS requires a complete overhaul of the loading and buffering logic to handle rapid updates and "hungry" buffer management.
+
+### 3. Ad Metadata (SCTE-35 & EMSG)
+For professional broadcasting, metadata is used to signal ad breaks and interactive events.
+- **SCTE-35**: Industry standard for signaling ad insertion points in the manifest (via `EXT-X-DATERANGE` or `EXT-X-CUE-OUT`).
+- **EMSG**: In-band metadata timed to specific video frames in fMP4 streams.
+These are critical for **Server-Side Ad Insertion (SSAI)** where the player needs to report when an ad started or hide the "seek" bar during commercials.
+
+## Remaining Missing Features in `hls-ts`
 
 If your project requires any of the following, you should stick with `hls.js` for now:
 
-- **Alternative Audio Tracks**: Switching between different language tracks or audio descriptions.
-- **WebVTT Subtitles**: Support for external or side-loaded text tracks.
-- **Digital Rights Management (DRM)**: Playing protected content via Widevine, PlayReady, or FairPlay.
-- **Low-Latency HLS (LL-HLS)**: Ultra-low delay streaming (requires specialized server support).
-- **Complex Metadata**: Parsing SCTE-35 ad markers or EMSG events for interactive features.
-- **Advanced Stall Recovery**: `hls.js` has more aggressive strategies for handling complex buffer gaps and browser-specific stalls.
+- **Digital Rights Management (DRM)**: Playing protected content.
+- **Low-Latency HLS (LL-HLS)**: Ultra-low delay streaming.
+- **Complex Metadata**: Parsing SCTE-35 ad markers or EMSG events.
+- **Advanced Stall Recovery**: `hls.js` has more aggressive strategies for handling complex buffer gaps and legacy browser stalls.
 
 ## When to use `hls-ts`?
-- You need a lightweight player for standard HLS/fMP4 streams.
-- You prioritize a small bundle size and a modern TypeScript codebase.
-- You don't need complex features like DRM or Multi-audio.
-- You are building a high-performance application where every kilobyte counts.
+- You need a lightweight player for standard HLS/fMP4/TS streams.
+- You prioritize a small bundle size and a modern, type-safe codebase.
+- You want native support for Multi-audio and Subtitles without the bulk of `hls.js`.
+- You are building a high-performance application targeting modern browsers.

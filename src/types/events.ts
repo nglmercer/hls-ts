@@ -30,6 +30,9 @@ export const Events = {
   AUDIO_TRACK_SWITCHED: 'audioTrackSwitched',
   SUBTITLE_TRACKS_UPDATED: 'subtitleTracksUpdated',
   SUBTITLE_TRACK_SWITCH: 'subtitleTrackSwitch',
+  FRAG_PARSING_METADATA: 'fragParsingMetadata',
+  DATERANGE_ENTERED: 'daterangeEntered',
+  DATERANGE_EXITED: 'daterangeExited',
   ERROR: 'hlsError',
   DESTROYING: 'hlsDestroying',
 } as const;

@@ -26,6 +26,19 @@ export interface PlaylistParseResult {
   live: boolean;
   type: string;
   initSegment: { url: string; byteRangeStart: number; byteRangeEnd: number } | null;
+  dateranges: Array<{
+    id: string;
+    class?: string;
+    startDate: string;
+    endDate?: string;
+    duration?: number;
+    plannedDuration?: number;
+    scte35Cmd?: string;
+    scte35Out?: string;
+    scte35In?: string;
+    endOnNext?: boolean;
+    attributes: Record<string, string>;
+  }>;
 }
 
 export function parseMasterPlaylist(data: string, baseurl: string): ParseResult {
@@ -97,6 +110,7 @@ export function parseMasterPlaylist(data: string, baseurl: string): ParseResult 
 
 export function parseMediaPlaylist(data: string, baseurl: string): PlaylistParseResult {
   const fragments: PlaylistParseResult['fragments'] = [];
+  const dateranges: PlaylistParseResult['dateranges'] = [];
   const lines = data.split('\n');
   let targetduration = 0;
   let version = 1;
@@ -170,13 +184,33 @@ export function parseMediaPlaylist(data: string, baseurl: string): PlaylistParse
       currentByteRange = '';
       currentProgramDateTime = 0;
       tagList = [];
+    } else if (line.startsWith(HlsTags.EXT_X_DATERANGE)) {
+      const attrString = line.substring(HlsTags.EXT_X_DATERANGE.length);
+      const attrs = parseAttributes(attrString);
+      const daterange: any = { attributes: {} };
+      
+      for (const [key, value] of Object.entries(attrs)) {
+        const k = key.toUpperCase();
+        if (k === 'ID') daterange.id = value;
+        else if (k === 'CLASS') daterange.class = value;
+        else if (k === 'START-DATE') daterange.startDate = value;
+        else if (k === 'END-DATE') daterange.endDate = value;
+        else if (k === 'DURATION') daterange.duration = parseFloat(value);
+        else if (k === 'PLANNED-DURATION') daterange.plannedDuration = parseFloat(value);
+        else if (k === 'SCTE35-CMD') daterange.scte35Cmd = value;
+        else if (k === 'SCTE35-OUT') daterange.scte35Out = value;
+        else if (k === 'SCTE35-IN') daterange.scte35In = value;
+        else if (k === 'END-ON-NEXT') daterange.endOnNext = value === 'YES';
+        else daterange.attributes[key] = value;
+      }
+      dateranges.push(daterange);
     }
   }
 
   endSN = sn - 1;
   live = !isEndlist;
 
-  return { fragments, targetduration, version, startSN, endSN, live, type, initSegment };
+  return { fragments, targetduration, version, startSN, endSN, live, type, initSegment, dateranges };
 }
 
 function parseAttributes(data: string): Record<string, string> {

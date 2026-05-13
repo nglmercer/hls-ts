@@ -159,16 +159,25 @@
       <button id="loadBtn">Load</button>
     </div>
 
-    <div class="controls">
-      <select id="presetSelect">
-        <option value="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8">Big Buck Bunny (VOD, 720p)</option>
-        <option value="https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8">Sintel (VOD, multi-res)</option>
-        <option value="https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8">Live Stream 1</option>
-      </select>
-      <button id="playBtn" disabled>▶ Play</button>
-      <button id="pauseBtn" disabled>⏸ Pause</button>
-      <span id="statusText" style="font-size:13px;color:#8b949e;">Ready</span>
-    </div>
+<div class="controls">
+       <select id="presetSelect">
+         <option value="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8">Big Buck Bunny (VOD, 720p)</option>
+         <option value="https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8">Sintel (VOD, multi-res)</option>
+         <option value="https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8">Live Stream 1</option>
+       </select>
+       <button id="playBtn" disabled>▶ Play</button>
+       <button id="pauseBtn" disabled>⏸ Pause</button>
+       <select id="audioTrackSelect" disabled>
+         <option value="-1">Audio: Auto</option>
+       </select>
+       <select id="subtitleTrackSelect" disabled>
+         <option value="-1">Subtitles: Off</option>
+       </select>
+       <label style="display:flex;align-items:center;gap:4px;font-size:13px;color:#8b949e;">
+         <input type="checkbox" id="subtitleToggle" checked> Show subtitles
+       </label>
+       <span id="statusText" style="font-size:13px;color:#8b949e;">Ready</span>
+     </div>
 
     <div class="player-wrapper">
       <video id="video" muted controls></video>
