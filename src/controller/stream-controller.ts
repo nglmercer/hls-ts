@@ -343,7 +343,7 @@ export class StreamController {
         {
           onSuccess: (res) => {
             this._pendingData = res.data;
-            this.hls.trigger(Events.FRAG_LOADED, { frag, part: this._currentPart, stats: res.stats });
+            this.hls.trigger(Events.FRAG_LOADED, { frag, part: this._currentPart ?? undefined, stats: res.stats });
           },
           onError: (err) => {
             this._loading = false;
@@ -380,7 +380,7 @@ export class StreamController {
           {
             onSuccess: (res) => {
               this._pendingData = res.data;
-              this.hls.trigger(Events.FRAG_LOADED, { frag: this._currentFrag, stats: res.stats });
+              this.hls.trigger(Events.FRAG_LOADED, { frag: this._currentFrag!, stats: res.stats });
             },
             onError: () => { this._loading = false; this._loadNextFragment(); },
             onTimeout: () => { this._loading = false; this._loadNextFragment(); },
@@ -419,13 +419,12 @@ export class StreamController {
           this.hls.trigger(Events.FRAG_LOADED, { frag, stats: res.stats });
         },
 onError: (err) => {
-           this._loading = false;
-           const reason = err instanceof Error ? err.message : JSON.stringify(err);
-           this.hls.trigger(Events.ERROR, { type: ErrorTypes.NETWORK_ERROR, details: ErrorDetails.FRAG_LOAD_ERROR, reason, frag });
-           this._loadNextFragment();
-
-         },
-         onTimeout: () => {
+            this._loading = false;
+            const reason = err instanceof Error ? err.message : JSON.stringify(err);
+            this.hls.trigger(Events.ERROR, { type: ErrorTypes.NETWORK_ERROR, details: ErrorDetails.FRAG_LOAD_ERROR, reason, frag, fatal: false });
+            this._loadNextFragment();
+          },
+          onTimeout: () => {
            this._loading = false;
            const error: HlsError = {
              type: ErrorTypes.NETWORK_ERROR,
@@ -482,22 +481,22 @@ onError: (err) => {
 
       // Append init segment as separate event (avoids intermediate concat copies)
       if (initSeg) {
-        this.hls.trigger(Events.BUFFER_APPENDING, { data: initSeg, type: TrackTypes.VIDEO });
+        this.hls.trigger(Events.BUFFER_APPENDING, { data: initSeg.buffer as ArrayBuffer, type: TrackTypes.VIDEO });
       }
 
       if (remuxResult.videoData) {
         this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.videoData, type: TrackTypes.VIDEO });
-        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.videoData, type: TrackTypes.VIDEO });
+        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.videoData.buffer as ArrayBuffer, type: TrackTypes.VIDEO });
       }
 
       if (remuxResult.audioData && this.hls.audioTrack === -1) {
         this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.audioData, type: TrackTypes.AUDIO });
-        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.audioData, type: TrackTypes.AUDIO });
+        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.audioData.buffer as ArrayBuffer, type: TrackTypes.AUDIO });
       }
 
       if (!remuxResult.videoData && !remuxResult.audioData && remuxResult.data) {
         this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.data, type: TrackTypes.VIDEO });
-        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.data, type: TrackTypes.VIDEO });
+        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.data.buffer as ArrayBuffer, type: TrackTypes.VIDEO });
       }
 
       this.hls.trigger(Events.FRAG_PARSED, { frag });

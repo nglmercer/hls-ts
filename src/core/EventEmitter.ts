@@ -1,4 +1,4 @@
-import type { HlsEventPayloads, Event } from './types/events';
+import type { HlsEventPayloads, Event } from '../types/events';
 
 export type EventHandler<EventName extends Event> = EventName extends keyof HlsEventPayloads
   ? HlsEventPayloads[EventName] extends void

@@ -173,10 +173,10 @@ export class AudioStreamController {
       if (!remuxResult) return;
 
       if (remuxResult.initSegment) {
-        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.initSegment, type: TrackTypes.AUDIO });
+        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.initSegment.buffer as ArrayBuffer, type: TrackTypes.AUDIO });
       }
       if (remuxResult.data) {
-        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.data, type: TrackTypes.AUDIO });
+        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.data.buffer as ArrayBuffer, type: TrackTypes.AUDIO });
       }
     } catch (err) {
       this.logger.error('Audio processing error', err);

@@ -1,4 +1,4 @@
-import { EventEmitter } from './EventEmitter';
+import { EventEmitter, type HlsEventEmitter } from './EventEmitter';
 import type { EventHandler } from './EventEmitter';
 import { Events } from '../types/events';
 import { defaultConfig, type HlsConfig } from '../types/config';
@@ -26,13 +26,13 @@ interface ComponentAPI {
   destroy(): void;
 }
 
-export class Hls implements void {
+export class Hls implements HlsEventEmitter {
   static defaultConfig: HlsConfig | undefined;
 
   public readonly config: HlsConfig;
   public readonly userConfig: Partial<HlsConfig>;
   public readonly logger: Logger;
-  private readonly _emitter: EventEmitter = new EventEmitter();
+  private _emitter: EventEmitter = new EventEmitter();
 
   private _media: HTMLMediaElement | null = null;
   private _url: string | null = null;
@@ -55,7 +55,7 @@ export class Hls implements void {
 
   constructor(userConfig: Partial<HlsConfig> = {}) {
     this.userConfig = userConfig;
-    this.config = { ...defaultConfig, ...(Hls.defaultConfig as Partial<HlsConfig> | undefined || {}), ...userConfig };
+    this.config = { ...defaultConfig, ...(Hls.defaultConfig as Partial<HlsConfig> || {}), ...userConfig };
     this.logger = new Logger('Hls');
     this.playlistLoader = new PlaylistLoader();
 
