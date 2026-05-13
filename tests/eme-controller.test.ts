@@ -3,24 +3,24 @@ import { EMEController } from '../src/controller/eme-controller';
 import { Hls } from '../src/core/Hls';
 
 describe('EMEController', () => {
-  it('should not attempt access if no DRM config is present', () => {
-    const hls = new Hls();
-    const controller = new EMEController(hls);
+it('should not attempt access if no DRM config is present', () => {
+     const hls = new Hls();
+     const controller = new EMEController(hls);
 
-    // @ts-ignore
-    const attemptSpy = mock(() => controller._attemptKeySystemAccess());
-    controller['_attemptKeySystemAccess'] = attemptSpy;
+     let attemptCalled = false;
+     // @ts-ignore
+     controller['_attemptKeySystemAccess'] = () => { attemptCalled = true; };
 
-    const media = {
-      addEventListener: mock(),
-      removeEventListener: mock(),
-      setMediaKeys: mock(() => Promise.resolve()),
-    } as unknown as HTMLMediaElement;
-    controller._onMediaAttached({ media });
+     const media = {
+       addEventListener: mock(),
+       removeEventListener: mock(),
+       setMediaKeys: mock(() => Promise.resolve()),
+     } as unknown as HTMLMediaElement;
+     controller._onMediaAttached({ media });
 
-    // It should have called it, but it returns early inside
-    expect(attemptSpy).toHaveBeenCalled();
-  });
+     // It should have called it, but it returns early inside
+     expect(attemptCalled).toBe(true);
+   });
 
   it('should try to request MediaKeySystemAccess if DRM is configured', async () => {
     const hls = new Hls({

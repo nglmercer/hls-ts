@@ -28,11 +28,12 @@ export class EMEController {
     this._attemptKeySystemAccess();
   };
 
-  _onMediaDetached = (): void => {
+  _onMediaDetached = async (): Promise<void> => {
     if (this._media) {
       this._media.removeEventListener('encrypted', this._onEncrypted);
-      this._media.setMediaKeys(null).catch(() => {});
-      this._media = null;
+      if ('setMediaKeys' in this._media) {
+        await this._media.setMediaKeys(null);
+      }
     }
     this._closeSessions();
     this._mediaKeys = null;
@@ -46,7 +47,7 @@ export class EMEController {
 
   private async _attemptKeySystemAccess(): Promise<void> {
     if (!this._media || this._hasConfigured || !this.hls.config.drm) return;
-    
+
     const drmConfig = this.hls.config.drm;
     const systemsToTry: KeySystem[] = [];
 
@@ -63,24 +64,24 @@ export class EMEController {
       try {
         const config = this._buildMediaKeySystemConfiguration(sys.config);
         const access = await navigator.requestMediaKeySystemAccess(sys.systemString, [config]);
-        
+
         this.logger.log(`KeySystemAccess supported for ${sys.systemString}`);
         this.hls.trigger(Events.KEY_SYSTEM_ACCESS_SUPPORTED, { keySystem: sys.systemString });
-        
+
         this._keySystemAccess = access;
         const keys = await access.createMediaKeys();
-        
+
         // If there's a server certificate, set it now
         if (sys.config.serverCertificateUrl) {
           await this._fetchAndSetServerCertificate(keys, sys.config.serverCertificateUrl);
         }
 
         this._mediaKeys = keys;
-        
+
         if (this._media) {
           await this._media.setMediaKeys(keys);
         }
-        
+
         // Successfully configured, no need to try others
         return;
       } catch (err) {
@@ -127,9 +128,9 @@ export class EMEController {
     try {
       const session = this._mediaKeys.createSession();
       this._sessions.push(session);
-      
+
       session.addEventListener('message', this._onSessionMessage);
-      
+
       await session.generateRequest(encEvent.initDataType, encEvent.initData);
       this.hls.trigger(Events.MEDIA_KEY_SESSION_CREATED, { session });
     } catch (err) {
@@ -146,11 +147,11 @@ export class EMEController {
   private _onSessionMessage = async (event: Event): Promise<void> => {
     const msgEvent = event as MediaKeyMessageEvent;
     const session = msgEvent.target as MediaKeySession;
-    
+
     // Find which config we are currently using based on the active KeySystemAccess
     const activeSystemString = this._keySystemAccess?.keySystem;
     let drmConfig: DrmSystemConfig | undefined;
-    
+
     if (activeSystemString === 'com.widevine.alpha') drmConfig = this.hls.config.drm?.widevine;
     else if (activeSystemString === 'com.microsoft.playready') drmConfig = this.hls.config.drm?.playready;
     else if (activeSystemString === 'com.apple.fps') drmConfig = this.hls.config.drm?.fairplay;
@@ -176,7 +177,7 @@ export class EMEController {
 
       const license = await response.arrayBuffer();
       await session.update(license);
-      
+
       this.logger.log('MediaKeySession updated with license successfully');
       this.hls.trigger(Events.MEDIA_KEY_SESSION_UPDATED, { session });
     } catch (err) {
@@ -193,7 +194,7 @@ export class EMEController {
   private _closeSessions(): void {
     for (const session of this._sessions) {
       session.removeEventListener('message', this._onSessionMessage);
-      session.close().catch(() => {});
+      session.close().catch(() => { });
     }
     this._sessions = [];
   }

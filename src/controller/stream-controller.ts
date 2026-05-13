@@ -314,12 +314,20 @@ export class StreamController {
           },
           onError: (err) => {
             this._loading = false;
-            this.hls.trigger(Events.ERROR, { type: 'NETWORK_ERROR', details: err });
+            const reason = err instanceof Error ? err.message : JSON.stringify(err);
+            this.hls.trigger(Events.ERROR, { type: ErrorTypes.NETWORK_ERROR, details: ErrorDetails.FRAG_LOAD_ERROR, reason, frag });
             this._loadNextFragment();
           },
           onTimeout: () => {
             this._loading = false;
-            this.hls.trigger(Events.ERROR, { type: 'NETWORK_ERROR', details: 'Timeout' });
+            const error: HlsError = {
+              type: ErrorTypes.NETWORK_ERROR,
+              details: ErrorDetails.FRAG_LOAD_TIMEOUT,
+              fatal: false,
+              reason: 'Fragment load timed out',
+              frag,
+            };
+            this.hls.trigger(Events.ERROR, error);
             this._loadNextFragment();
           },
         }
@@ -377,27 +385,28 @@ export class StreamController {
           this._pendingData = res.data;
           this.hls.trigger(Events.FRAG_LOADED, { frag, stats: res.stats });
         },
-        onError: (err) => {
-          this._loading = false;
-          this.hls.trigger(Events.ERROR, { type: 'NETWORK_ERROR', details: err });
-          this._loadNextFragment();
+onError: (err) => {
+           this._loading = false;
+           const reason = err instanceof Error ? err.message : JSON.stringify(err);
+           this.hls.trigger(Events.ERROR, { type: ErrorTypes.NETWORK_ERROR, details: ErrorDetails.FRAG_LOAD_ERROR, reason, frag });
+           this._loadNextFragment();
 
-        },
-        onTimeout: () => {
-          this._loading = false;
-          const error: HlsError = {
-            type: ErrorTypes.NETWORK_ERROR,
-            details: ErrorDetails.FRAG_LOAD_TIMEOUT,
-            fatal: false,
-            reason: 'Fragment load timed out',
-            frag,
-          };
-          this.hls.trigger(Events.ERROR, error);
-          this._loadNextFragment();
-        },
-      },
-    );
-  }
+         },
+         onTimeout: () => {
+           this._loading = false;
+           const error: HlsError = {
+             type: ErrorTypes.NETWORK_ERROR,
+             details: ErrorDetails.FRAG_LOAD_TIMEOUT,
+             fatal: false,
+             reason: 'Fragment load timed out',
+             frag,
+           };
+           this.hls.trigger(Events.ERROR, error);
+           this._loadNextFragment();
+         },
+       },
+     );
+   }
 
   private async _processFragment(data: ArrayBuffer, frag: Fragment): Promise<void> {
     const uint8 = new Uint8Array(data);
