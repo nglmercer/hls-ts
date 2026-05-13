@@ -42,7 +42,7 @@ export class PlaylistLoader {
     return this._stats;
   }
 
-  load(context: LoaderContext, callbacks: LoaderCallbacks<string>): void {
+  load(context: LoaderContext, callbacks: LoaderCallbacks<string>, timeoutMs: number = 10000): void {
     // Abort any in-flight request before starting a new one
     if (this._abortController) {
       this._abortController.abort();
@@ -55,7 +55,7 @@ export class PlaylistLoader {
     const timeout = setTimeout(() => {
       controller.abort();
       callbacks.onTimeout(this._stats, context);
-    }, 10000);
+    }, timeoutMs);
 
     fetch(context.url, {
       headers: context.headers,

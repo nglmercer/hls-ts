@@ -329,6 +329,25 @@ export class StreamController {
 
     const frag = this._fragQueue.shift()!;
     if (!frag) {
+      // Check for preload hints if we're out of fragments but in LL-HLS mode
+      const details = this._levelController.currentLevel?.details;
+      if (details?.preloadHint && details.preloadHint.type === 'PART') {
+        const hint = details.preloadHint;
+        this.logger.log(`Loading preload hint: ${hint.uri}`);
+        this._fragmentLoader.load(
+          { url: hint.uri, frag: this._currentFrag! }, // Use last frag context
+          {
+            onSuccess: (res) => {
+              this._pendingData = res.data;
+              this.hls.trigger(Events.FRAG_LOADED, { frag: this._currentFrag, stats: res.stats });
+            },
+            onError: () => { this._loading = false; this._loadNextFragment(); },
+            onTimeout: () => { this._loading = false; this._loadNextFragment(); },
+          }
+        );
+        return;
+      }
+
       this._loading = false;
       return;
     }

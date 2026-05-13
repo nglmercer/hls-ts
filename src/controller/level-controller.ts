@@ -45,11 +45,27 @@ export class LevelController {
   _startLivePolling(targetDuration: number): void {
     const interval = Math.max(targetDuration / 2, 0.5) * 1000;
     this._livePollInterval = setInterval(() => {
-      if (this._currentLevel) {
-        // avoid triggering LEVEL_LOADING for live updates to reduce log spam
+      if (this._currentLevel && !this._playlistLoader.stats.loading) {
+        let url = this._currentLevel.url;
+        const details = this._currentLevel.details;
+
+        if (details && details.canBlockReload) {
+          const nextSN = details.endSN;
+          const lastFrag = details.fragments[details.fragments.length - 1];
+          const nextPart = lastFrag && lastFrag.parts ? lastFrag.parts.length : 0;
+          
+          const separator = url.indexOf('?') === -1 ? '?' : '&';
+          url += `${separator}_HLS_msn=${nextSN}&_HLS_part=${nextPart}`;
+          
+          if (details.canSkipUntil && details.canSkipUntil > 0) {
+            url += `&_HLS_skip=YES`;
+          }
+        }
+
         const baseurl = this._currentLevel.url.substring(0, this._currentLevel.url.lastIndexOf('/') + 1);
+        const timeout = details?.canBlockReload ? targetDuration * 3000 : 10000;
         this._playlistLoader.load(
-          { url: this._currentLevel.url },
+          { url },
           {
             onSuccess: (response) => {
               const result = parseMediaPlaylist(response.data, baseurl);
@@ -61,7 +77,8 @@ export class LevelController {
             },
             onError: () => { }, // silent retry on interval
             onTimeout: () => { },
-          }
+          },
+          timeout
         );
       }
     }, interval);
