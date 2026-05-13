@@ -9,6 +9,7 @@ const pauseBtn = document.getElementById("pauseBtn") as HTMLButtonElement;
 const presetSelect = document.getElementById("presetSelect") as HTMLSelectElement;
 const audioTrackSelect = document.getElementById("audioTrackSelect") as HTMLSelectElement;
 const subtitleTrackSelect = document.getElementById("subtitleTrackSelect") as HTMLSelectElement;
+const qualitySelect = document.getElementById("qualitySelect") as HTMLSelectElement;
 const subtitleToggle = document.getElementById("subtitleToggle") as HTMLInputElement;
 const statusText = document.getElementById("statusText") as HTMLSpanElement;
 const logContainer = document.getElementById("logContainer") as HTMLDivElement;
@@ -88,6 +89,18 @@ function populateTrackSelects() {
   subtitleTrackSelect.value = String(hls.subtitleTrack);
   subtitleTrackSelect.disabled = hls.subtitleTracks.length === 0;
   subtitleToggle.checked = hls.subtitleTrack >= 0;
+
+  // Quality levels
+  qualitySelect.innerHTML = '<option value="-1">Level: Auto</option>';
+  hls.levels.forEach((lvl, i) => {
+    const opt = document.createElement("option");
+    opt.value = String(i);
+    const res = lvl.width ? `${lvl.width}x${lvl.height}` : "Unknown";
+    opt.textContent = `${res} (${formatBitrate(lvl.bitrate)})`;
+    qualitySelect.appendChild(opt);
+  });
+  qualitySelect.value = String(hls.currentLevel);
+  qualitySelect.disabled = hls.levels.length === 0;
 }
 
 function loadSource(url: string) {
@@ -135,7 +148,11 @@ function loadSource(url: string) {
     const lvl = hls?.levels?.[level];
     if (lvl) {
       statRes.textContent = lvl.width ? `${lvl.width}x${lvl.height}` : "N/A";
-      appendLog(`Level ${level}: ${formatBitrate(lvl.bitrate)}${lvl.width ? ` @ ${lvl.width}x${lvl.height}` : ""}`, "log-info");
+      if (qualitySelect.value === "-1") {
+        appendLog(`Auto-switched to level ${level}: ${formatBitrate(lvl.bitrate)}`, "log-info");
+      } else {
+        appendLog(`Switched to level ${level}: ${formatBitrate(lvl.bitrate)}`, "log-info");
+      }
     }
   });
 
@@ -221,6 +238,10 @@ audioTrackSelect.addEventListener("change", () => {
 
 subtitleTrackSelect.addEventListener("change", () => {
   if (hls) hls.subtitleTrack = Number(subtitleTrackSelect.value);
+});
+
+qualitySelect.addEventListener("change", () => {
+  if (hls) hls.currentLevel = Number(qualitySelect.value);
 });
 
 subtitleToggle.addEventListener("change", () => {

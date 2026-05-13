@@ -123,7 +123,7 @@ export class StreamController {
     }
   }
 
-_startLoading(): void {
+  _startLoading(): void {
     this._paused = false;
     const startPosition = this.hls.config.startPosition;
     if (startPosition >= 0) {
