@@ -101,15 +101,27 @@ export class StreamController {
   private _applyLevelUpdate(fragments: Fragment[], details: LevelDetails, isLL: boolean): void {
     if (this._currentFrag) {
       const nextStartTime = this._currentFrag.start + this._currentFrag.duration;
-      const startFrag = this._findFragmentByPTS(nextStartTime, fragments)
+      const curTime = this._media?.currentTime ?? nextStartTime;
+      let startFrag = this._findFragmentByPTS(nextStartTime, fragments)
+        ?? this._findFragmentByPTS(curTime, fragments)
         ?? this._findFragmentByPTS(this._currentFrag.start, fragments);
 
       if (startFrag) {
-        this._fragQueue = fragments.filter(f => f.sn >= startFrag.sn);
+        if (this._currentFrag && startFrag.start < this._currentFrag.start - 0.5) {
+          const retry = this._findFragmentByPTS(
+            this._media?.currentTime ?? this._currentFrag.start + this._currentFrag.duration,
+            fragments,
+          );
+          if (retry && retry.start >= this._currentFrag.start - 0.5) {
+            startFrag = retry;
+          }
+        }
+        const sf = startFrag;
+        this._fragQueue = fragments.filter(f => f.sn >= sf.sn);
 
-        if (isLL && startFrag.sn === this._currentFrag.sn && startFrag.parts) {
+        if (isLL && sf.sn === this._currentFrag.sn && sf.parts) {
           const lastPartIdx = this._currentPart ? this._currentPart.part : -1;
-          this._partQueue = startFrag.parts.filter(p => p.part > lastPartIdx);
+          this._partQueue = sf.parts.filter(p => p.part > lastPartIdx);
         }
       } else {
         this._fragQueue = [...fragments];
@@ -225,9 +237,15 @@ export class StreamController {
     // Debounce: during rapid seeking (scrubber drag), coalesce into one frame
     if (this._seekPending) return;
     this._seekPending = true;
+    const targetTime = this._media?.currentTime ?? 0;
     requestAnimationFrame(() => {
       this._seekPending = false;
-      this._pendingLevelUpdate = null;
+      // If the playhead has already moved more than 1s past the captured target,
+      // this seeking event was stale (e.g. Firefox emits 'seeking' at startup
+      // with currentTime=0, but by the time rAF fires we've already loaded data).
+      if (this._media && Math.abs(this._media.currentTime - targetTime) > 1) {
+        return;
+      }
       this._seekGeneration++;
       this._seeking = true;
       this._loading = false;
@@ -238,8 +256,6 @@ export class StreamController {
       this._lastLevel = undefined;
 
       if (this._media) {
-        const targetTime = this._media.currentTime;
-
         this.hls.trigger(Events.BUFFER_FLUSHING, { startOffset: 0, endOffset: Infinity });
         const level = this._levelController.currentLevel;
         if (level?.details) {
@@ -479,19 +495,13 @@ onError: (err) => {
       const baseDts = Math.round(frag.start * 90000);
       const level = frag.level;
       const lastCC = this._lastCC.get(level);
-      const discontinuity = lastCC !== undefined && frag.cc !== lastCC + 1;
+      let discontinuity = lastCC !== undefined && frag.cc !== lastCC + 1;
       this._lastCC.set(level, frag.cc);
 
       if (this._lastLevel !== undefined && this._lastLevel !== level) {
         this._transmuxer.reset();
         this._lastFragmentIndex = -1;
-        if (this._media && this._media.buffered.length > 0) {
-          const flushStart = Math.max(this._media.currentTime, Math.max(0, frag.start - 0.5));
-          const flushEnd = this._media.buffered.end(this._media.buffered.length - 1);
-          if (flushEnd > flushStart) {
-            this.hls.trigger(Events.BUFFER_FLUSHING, { startOffset: flushStart, endOffset: flushEnd });
-          }
-        }
+        discontinuity = true;
       }
       this._lastLevel = level;
 
