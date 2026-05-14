@@ -281,6 +281,7 @@ on<EventName extends string>(event: EventName, handler: EventHandler<EventName>)
     this.on(Events.BUFFER_FLUSHING, bc._onBufferFlushing);
     this.on(Events.BUFFER_RESET, bc._onBufferReset);
     this.on(Events.LEVEL_UPDATED, bc._onLevelUpdated);
+    this.on(Events.LEVEL_SWITCHING, bc._onLevelSwitching);
 
     this.on(Events.MANIFEST_PARSED, lc._onManifestParsed);
     this.on(Events.LEVEL_LOADING, lc._onLevelLoading);

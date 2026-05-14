@@ -123,6 +123,10 @@ export class BufferController {
     }
   };
 
+  _onLevelSwitching = (): void => {
+    this._retryData.clear();
+  };
+
   private _createMediaSource(): void {
     this._cleanMediaSource();
 

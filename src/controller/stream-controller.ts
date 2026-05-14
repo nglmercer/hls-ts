@@ -525,14 +525,23 @@ onError: (err) => {
       // The MP4 spec allows ftyp+moov+moof+mdat in a single buffer.
       const initSeg = remuxResult.initSegment;
 
-      // Append init segment as separate event (avoids intermediate concat copies)
-      if (initSeg) {
-        this.hls.trigger(Events.BUFFER_APPENDING, { data: initSeg.buffer as ArrayBuffer, type: TrackTypes.VIDEO });
-      }
-
-      if (remuxResult.videoData) {
+      // Combine init segment + video data into a single appendBuffer call.
+      // Firefox handles combined ftyp+moov+moof+mdat segments more reliably
+      // than separate init and media appends (especially across level switches).
+      if (initSeg && remuxResult.videoData) {
+        const combined = new Uint8Array(initSeg.length + remuxResult.videoData.length);
+        combined.set(initSeg, 0);
+        combined.set(remuxResult.videoData, initSeg.length);
         this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.videoData, type: TrackTypes.VIDEO });
-        this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.videoData.buffer as ArrayBuffer, type: TrackTypes.VIDEO });
+        this.hls.trigger(Events.BUFFER_APPENDING, { data: combined.buffer as ArrayBuffer, type: TrackTypes.VIDEO });
+      } else {
+        if (initSeg) {
+          this.hls.trigger(Events.BUFFER_APPENDING, { data: initSeg.buffer as ArrayBuffer, type: TrackTypes.VIDEO });
+        }
+        if (remuxResult.videoData) {
+          this.hls.trigger(Events.FRAG_PARSING_DATA, { frag, data: remuxResult.videoData, type: TrackTypes.VIDEO });
+          this.hls.trigger(Events.BUFFER_APPENDING, { data: remuxResult.videoData.buffer as ArrayBuffer, type: TrackTypes.VIDEO });
+        }
       }
 
       if (remuxResult.audioData && this.hls.audioTrack === -1) {
