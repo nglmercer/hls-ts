@@ -30,6 +30,7 @@ export class StreamController {
   private _lastFragmentIndex: number = -1;
   private _lastFragmentIndexLevel: number = -1;
   private _seekGeneration: number = 0;
+  private _seekPending: boolean = false;
   private _pendingLevelUpdate: { fragments: Fragment[]; details: LevelDetails; isLL: boolean } | null = null;
   private logger = new Logger('StreamController');
 
@@ -220,31 +221,35 @@ export class StreamController {
   };
 
   _onSeeking = (): void => {
-    this._pendingLevelUpdate = null;
-    this._seekGeneration++;
-    this._seeking = true;
-    this._loading = false;
-    this._currentFrag = null;
-    this._fragQueue = [];
-    this._fragmentLoader.abort();
-    this.hls.trigger(Events.BUFFER_RESET);
-    this._lastLevel = undefined;
+    // Debounce: during rapid seeking (scrubber drag), coalesce into one frame
+    if (this._seekPending) return;
+    this._seekPending = true;
+    requestAnimationFrame(() => {
+      this._seekPending = false;
+      this._pendingLevelUpdate = null;
+      this._seekGeneration++;
+      this._seeking = true;
+      this._loading = false;
+      this._currentFrag = null;
+      this._fragQueue = [];
+      this._fragmentLoader.abort();
+      this.hls.trigger(Events.BUFFER_RESET);
+      this._lastLevel = undefined;
 
-    // Start loading immediately at the seek position to break the Catch-22
-    if (this._media) {
-      const targetTime = this._media.currentTime;
+      if (this._media) {
+        const targetTime = this._media.currentTime;
 
-      // Flush old buffer data — the previous position's data is stale after seeking
-      this.hls.trigger(Events.BUFFER_FLUSHING, { startOffset: 0, endOffset: Infinity });
-      const level = this._levelController.currentLevel;
-      if (level?.details) {
-        const frag = this._findFragmentByPTS(targetTime, level.details.fragments);
-        if (frag) {
-          this._fragQueue = level.details.fragments.filter(f => f.sn >= frag.sn);
-          this._loadNextFragment();
+        this.hls.trigger(Events.BUFFER_FLUSHING, { startOffset: 0, endOffset: Infinity });
+        const level = this._levelController.currentLevel;
+        if (level?.details) {
+          const frag = this._findFragmentByPTS(targetTime, level.details.fragments);
+          if (frag) {
+            this._fragQueue = level.details.fragments.filter(f => f.sn >= frag.sn);
+            this._loadNextFragment();
+          }
         }
       }
-    }
+    });
   };
 
   _onSeeked = (): void => {
@@ -302,6 +307,11 @@ export class StreamController {
 
   private _loadNextFragment(): void {
     if (this._paused || this._loading) return;
+    if (this._pendingLevelUpdate) {
+      const { fragments, details, isLL } = this._pendingLevelUpdate;
+      this._pendingLevelUpdate = null;
+      this._applyLevelUpdate(fragments, details, isLL);
+    }
     if (this._fragQueue.length === 0 && this._partQueue.length === 0) return;
 
     if (this._checkBufferTimer) {
