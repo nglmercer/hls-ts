@@ -30,6 +30,7 @@ export class StreamController {
   private _lastFragmentIndex: number = -1;
   private _lastFragmentIndexLevel: number = -1;
   private _seekGeneration: number = 0;
+  private _pendingLevelUpdate: { fragments: Fragment[]; details: LevelDetails; isLL: boolean } | null = null;
   private logger = new Logger('StreamController');
 
   constructor(hls: Hls, levelController: LevelController, abrController: AbrController) {
@@ -82,6 +83,19 @@ export class StreamController {
 
     const isLL = data.details.partTarget !== undefined;
 
+    // Don't rebuild queue while a fragment is being processed — the in-flight
+    // fragment comes from the old level and replacing the queue mid-load causes
+    // fragment SN jumps. Defer until loading completes.
+    if (this._loading) {
+      this._pendingLevelUpdate = { fragments, details: data.details, isLL };
+      return;
+    }
+
+    this._applyLevelUpdate(fragments, data.details, isLL);
+    this._loadNextFragment();
+  };
+
+  private _applyLevelUpdate(fragments: Fragment[], details: LevelDetails, isLL: boolean): void {
     if (this._currentFrag) {
       const nextStartTime = this._currentFrag.start + this._currentFrag.duration;
       const startFrag = this._findFragmentByPTS(nextStartTime, fragments)
@@ -90,7 +104,6 @@ export class StreamController {
       if (startFrag) {
         this._fragQueue = fragments.filter(f => f.sn >= startFrag.sn);
 
-        // If we were loading parts, update the part queue from the new fragment
         if (isLL && startFrag.sn === this._currentFrag.sn && startFrag.parts) {
           const lastPartIdx = this._currentPart ? this._currentPart.part : -1;
           this._partQueue = startFrag.parts.filter(p => p.part > lastPartIdx);
@@ -99,9 +112,9 @@ export class StreamController {
         this._fragQueue = [...fragments];
       }
     } else {
-      if (data.details.live) {
-        if (isLL && data.details.partHoldBack) {
-          const targetTime = fragments[fragments.length - 1].start + fragments[fragments.length - 1].duration - data.details.partHoldBack;
+      if (details.live) {
+        if (isLL && details.partHoldBack) {
+          const targetTime = fragments[fragments.length - 1].start + fragments[fragments.length - 1].duration - details.partHoldBack;
           const startFrag = this._findFragmentByPTS(targetTime, fragments);
           if (startFrag) {
             this._fragQueue = fragments.filter(f => f.sn >= startFrag.sn);
@@ -130,8 +143,7 @@ export class StreamController {
         }
       }
     }
-    this._loadNextFragment();
-  };
+  }
 
 
   _onFragLoaded = async (data: { frag: Fragment; part?: Part; stats: { loaded: number; total: number; trequest: number; tfirst: number; tload: number } }) => {
@@ -158,6 +170,11 @@ export class StreamController {
       await this._processFragment(responseData, frag);
     } finally {
       this._loading = false;
+      if (this._pendingLevelUpdate) {
+        const { fragments, details, isLL } = this._pendingLevelUpdate;
+        this._pendingLevelUpdate = null;
+        this._applyLevelUpdate(fragments, details, isLL);
+      }
       this._loadNextFragment();
     }
   };
@@ -189,22 +206,21 @@ export class StreamController {
   _seekTo = (time: number): void => {
     if (!this._media) return;
 
+    this._pendingLevelUpdate = null;
     this._seeking = true;
     this._loading = false;
     this._currentFrag = null;
     this._fragQueue = [];
     this._fragmentLoader.abort();
 
+    // media.currentTime = time synchronously fires the 'seeking' event,
+    // which triggers _onSeeking — that handles BUFFER_RESET, BUFFER_FLUSHING,
+    // queue rebuild, and _loadNextFragment. Don't duplicate those operations here.
     this._media.currentTime = time;
-
-    this.hls.trigger(Events.BUFFER_RESET);
-    this._lastLevel = undefined;
-
-    // Only flush the buffer ahead of the seek target; preserve already-played buffer
-    this.hls.trigger(Events.BUFFER_FLUSHING, { startOffset: time, endOffset: Infinity });
   };
 
   _onSeeking = (): void => {
+    this._pendingLevelUpdate = null;
     this._seekGeneration++;
     this._seeking = true;
     this._loading = false;
@@ -218,8 +234,8 @@ export class StreamController {
     if (this._media) {
       const targetTime = this._media.currentTime;
 
-      // Only flush ahead of the seek target; preserve already-played buffer
-      this.hls.trigger(Events.BUFFER_FLUSHING, { startOffset: targetTime, endOffset: Infinity });
+      // Flush old buffer data — the previous position's data is stale after seeking
+      this.hls.trigger(Events.BUFFER_FLUSHING, { startOffset: 0, endOffset: Infinity });
       const level = this._levelController.currentLevel;
       if (level?.details) {
         const frag = this._findFragmentByPTS(targetTime, level.details.fragments);
