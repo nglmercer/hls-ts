@@ -31,6 +31,8 @@ export class StreamController {
   private _lastFragmentIndexLevel: number = -1;
   private _seekGeneration: number = 0;
   private _seekPending: boolean = false;
+  private _loadingReentrant: boolean = false;
+  private _levelGeneration: number = 0;
   private _pendingLevelUpdate: { fragments: Fragment[]; details: LevelDetails; isLL: boolean } | null = null;
   private logger = new Logger('StreamController');
 
@@ -113,15 +115,16 @@ export class StreamController {
         this._fragQueue = [...fragments];
       }
     } else {
+      // Try to find starting position from media currentTime or buffered end
+      const startTime = this._media?.currentTime ?? 
+        (this._media?.buffered.length ? this._media.buffered.end(this._media.buffered.length - 1) : 0);
+      
       if (details.live) {
         if (isLL && details.partHoldBack) {
           const targetTime = fragments[fragments.length - 1].start + fragments[fragments.length - 1].duration - details.partHoldBack;
-          const startFrag = this._findFragmentByPTS(targetTime, fragments);
+          const startFrag = this._findFragmentByPTS(targetTime, fragments) ?? this._findFragmentByPTS(startTime, fragments);
           if (startFrag) {
             this._fragQueue = fragments.filter(f => f.sn >= startFrag.sn);
-            if (startFrag.parts) {
-              this._partQueue = startFrag.parts.filter(p => (startFrag.start + p.duration * (p.part + 1)) >= targetTime);
-            }
           } else {
             this._fragQueue = [fragments[fragments.length - 1]];
           }
@@ -131,14 +134,9 @@ export class StreamController {
           this._fragQueue = fragments.slice(startIndex);
         }
       } else {
-        if (this._media && this._media.buffered.length > 0) {
-          const bufferedEnd = this._media.buffered.end(this._media.buffered.length - 1);
-          const startFrag = this._findFragmentByPTS(bufferedEnd, fragments);
-          if (startFrag) {
-            this._fragQueue = fragments.filter(f => f.sn >= startFrag.sn);
-          } else {
-            this._fragQueue = [...fragments];
-          }
+        const startFrag = this._findFragmentByPTS(startTime, fragments);
+        if (startFrag) {
+          this._fragQueue = fragments.filter(f => f.sn >= startFrag.sn);
         } else {
           this._fragQueue = [...fragments];
         }
@@ -164,6 +162,9 @@ export class StreamController {
       if (currentLevel && nextLevelId !== currentLevel.id && this._levelController.levels[nextLevelId]) {
         this.hls.trigger(Events.LEVEL_SWITCHING, { level: nextLevelId });
         this._levelController.loadLevel(nextLevelId);
+        this._fragQueue = [];
+        this._partQueue = [];
+        this._levelGeneration++;
       }
     }
 
@@ -306,7 +307,7 @@ export class StreamController {
   }
 
   private _loadNextFragment(): void {
-    if (this._paused || this._loading) return;
+    if (this._paused || this._loading || this._loadingReentrant) return;
     if (this._pendingLevelUpdate) {
       const { fragments, details, isLL } = this._pendingLevelUpdate;
       this._pendingLevelUpdate = null;
@@ -349,7 +350,9 @@ export class StreamController {
       }
     }
     this._loading = true;
+    this._loadingReentrant = true;
     this._doLoad();
+    this._loadingReentrant = false;
   }
 
   private _doLoad(): void {
@@ -481,6 +484,7 @@ onError: (err) => {
 
       if (this._lastLevel !== undefined && this._lastLevel !== level) {
         this._transmuxer.reset();
+        this._lastFragmentIndex = -1;
         if (this._media && this._media.buffered.length > 0) {
           const start = frag.start;
           const end = this._media.buffered.end(this._media.buffered.length - 1);
@@ -491,9 +495,11 @@ onError: (err) => {
       }
       this._lastLevel = level;
 
+      const levelGen = this._levelGeneration;
       const { remuxResult } = await this._transmuxer.transmux(uint8, frag.start, baseDts, discontinuity);
 
       if (this._seekGeneration !== gen) return;
+      if (this._levelGeneration !== levelGen) return;
       if (!remuxResult) return;
 
       // Append init segment first (contains ftyp + moov with all tracks)

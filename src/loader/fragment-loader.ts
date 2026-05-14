@@ -128,6 +128,7 @@ export class FragmentLoader {
     this._abortController = new AbortController();
 
     const timeout = setTimeout(() => {
+      if (gen !== this._requestGen) return;
       this._stats.aborted = true;
       this._abortController?.abort();
       this._stats.loading = false;
@@ -206,6 +207,7 @@ export class FragmentLoader {
       })
       .catch((err) => {
         clearTimeout(timeout);
+        if (gen !== this._requestGen) return;
         this._stats.loading = false;
         if (err.name === 'AbortError') {
           if (!this._stats.aborted) {
