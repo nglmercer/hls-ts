@@ -1,5 +1,4 @@
-import { EventEmitter } from './EventEmitter';
-import type { EventHandler } from './EventEmitter';
+import { EventEmitter, type EventHandler, type GenericEventHandler, type PayloadOf } from './EventEmitter';
 import { Events } from '../types/events';
 import { defaultConfig, type HlsConfig } from '../types/config';
 import type { ManifestData } from '../types/level';
@@ -115,6 +114,7 @@ export class Hls {
   }
 
   loadSource(url: string): void {
+    this.playlistLoader.abort();
     this._url = url;
     this.trigger(Events.MANIFEST_LOADING, { url });
     this._loadManifest(url);
@@ -127,15 +127,14 @@ export class Hls {
     this.trigger(Events.MEDIA_ATTACHED, { media });
   }
 
-  detachMedia(): void {
-    if (this._media) {
-      this._media.removeEventListener('seeking', this._onMediaSeeking);
-      this._media.removeEventListener('seeked', this._onMediaSeeked);
-    }
-    this._emitter.removeAllListeners(Events.MEDIA_DETACHED);
-    this.trigger(Events.MEDIA_DETACHED);
-    this._media = null;
-  }
+detachMedia(): void {
+     if (this._media) {
+       this._media.removeEventListener('seeking', this._onMediaSeeking);
+       this._media.removeEventListener('seeked', this._onMediaSeeked);
+     }
+     this.trigger(Events.MEDIA_DETACHED);
+     this._media = null;
+   }
 
   destroy(): void {
     this.trigger(Events.DESTROYING);
@@ -229,33 +228,33 @@ export class Hls {
     this.errorController.recoverMediaError();
   }
 
-  on<EventName extends import('../types/events').Event>(event: EventName, handler: EventHandler<EventName>): void {
-    return this._emitter.on(event, handler);
-  }
+on<EventName extends string>(event: EventName, handler: EventHandler<EventName>): void {
+     return this._emitter.on(event, handler);
+   }
 
-  once<EventName extends import('../types/events').Event>(event: EventName, handler: EventHandler<EventName>): void {
-    return this._emitter.once(event, handler);
-  }
+   once<EventName extends string>(event: EventName, handler: EventHandler<EventName>): void {
+     return this._emitter.once(event, handler);
+   }
 
-  off<EventName extends import('../types/events').Event>(event: EventName, handler: EventHandler<EventName>): void {
-    return this._emitter.off(event, handler);
-  }
+   off<EventName extends string>(event: EventName, handler: EventHandler<EventName>): void {
+     return this._emitter.off(event, handler);
+   }
 
-  emit<EventName extends import('../types/events').Event>(event: EventName, ...data: import('../types/events').HlsEventPayloads[EventName] extends void ? [] : [import('../types/events').HlsEventPayloads[EventName]]): void {
-    return this._emitter.emit(event, ...data);
-  }
+   emit<EventName extends string>(event: EventName, ...data: PayloadOf<EventName>): void {
+     this._emitter.emit(event, ...data);
+   }
 
-  trigger<EventName extends import('../types/events').Event>(event: EventName, ...data: import('../types/events').HlsEventPayloads[EventName] extends void ? [] : [import('../types/events').HlsEventPayloads[EventName]]): void {
-    return this._emitter.trigger(event, ...data);
-  }
+   removeAllListeners(event?: string): void {
+     return this._emitter.removeAllListeners(event);
+   }
 
-  removeAllListeners(event?: import('../types/events').Event): void {
-    return this._emitter.removeAllListeners(event);
-  }
+   listeners(event: string): GenericEventHandler[] {
+     return this._emitter.listeners(event);
+   }
 
-  listeners(event: import('../types/events').Event): EventHandler<any>[] {
-    return this._emitter.listeners(event);
-  }
+   trigger<EventName extends string>(event: EventName, ...data: PayloadOf<EventName>): void {
+     return this._emitter.trigger(event, ...data);
+   }
 
   private _onMediaSeeking = (): void => {
     this.trigger(Events.MEDIA_SEEKING);

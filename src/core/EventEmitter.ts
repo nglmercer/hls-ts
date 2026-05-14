@@ -1,109 +1,116 @@
-import type { HlsEventPayloads, Event } from '../types/events';
+import type { HlsEventPayloads } from '../types/events';
 
-export type EventHandler<EventName extends Event> = EventName extends keyof HlsEventPayloads
-  ? HlsEventPayloads[EventName] extends void
-    ? () => void
-    : (data: HlsEventPayloads[EventName]) => void
-  : (...args: any[]) => void;
+type KnownEvents = keyof HlsEventPayloads;
+
+/**
+ * For known HLS events, provide a typed payload.
+ * For ad-hoc / unknown event names, fall back to any[].
+ */
+export type EventHandler<EventName extends string> =
+  EventName extends KnownEvents
+    ? HlsEventPayloads[EventName] extends void
+      ? () => void
+      : (data: HlsEventPayloads[EventName]) => void
+    : (...args: any[]) => void;
 
 export type GenericEventHandler = (...args: any[]) => void | Promise<void>;
 
+/** Helper to extract the payload tuple for a given event name */
+export type PayloadOf<EventName extends string> =
+  EventName extends KnownEvents
+    ? HlsEventPayloads[EventName] extends void
+      ? []
+      : [HlsEventPayloads[EventName]]
+    : any[];
+
 export interface HlsEventEmitter {
-  on<EventName extends Event>(event: EventName, handler: EventHandler<EventName>): void;
-  once<EventName extends Event>(event: EventName, handler: EventHandler<EventName>): void;
-  off<EventName extends Event>(event: EventName, handler: EventHandler<EventName>): void;
-  emit<EventName extends Event>(event: EventName, ...data: HlsEventPayloads[EventName] extends void ? [] : [HlsEventPayloads[EventName]]): void;
-  removeAllListeners(event?: Event): void;
-  listeners(event: Event): GenericEventHandler[];
-  trigger<EventName extends Event>(event: EventName, ...data: HlsEventPayloads[EventName] extends void ? [] : [HlsEventPayloads[EventName]]): void;
+  /** Subscribe to any event. For known events the handler is typed; for ad-hoc events use any[]. */
+  on(event: string, handler: GenericEventHandler): void;
+  once(event: string, handler: GenericEventHandler): void;
+  off(event: string, handler: GenericEventHandler): void;
+  /** Emit a known event with typed payload, or an ad-hoc event with any[] args. */
+  emit<EventName extends string>(event: EventName, ...data: PayloadOf<EventName>): void;
+  removeAllListeners(event?: string): void;
+  listeners(event: string): GenericEventHandler[];
+  trigger<EventName extends string>(event: EventName, ...data: PayloadOf<EventName>): void;
 }
 
+/**
+ * EventEmitter with typed payloads for known HLS events
+ * (compile-time checked on emit/trigger) and generic any[] for ad-hoc events.
+ *
+ * Internal storage uses a flat Map<string, GenericEventHandler[]> so
+ * ad-hoc listener registrations never conflict with known-event ones.
+ *
+ * Once-listeners fire exactly once and are fully cleaned up before the
+ * handler runs, so they never double-fire even when also tracked in _events.
+ */
 export class EventEmitter implements HlsEventEmitter {
   private _events: Map<string, GenericEventHandler[]> = new Map();
-  private _once: Map<string, GenericEventHandler[]> = new Map();
 
-  on<EventName extends Event>(event: EventName, handler: EventHandler<EventName>): void {
-    const handlers = this._events.get(event as string);
+  on(event: string, handler: GenericEventHandler): void {
+    const handlers = this._events.get(event);
     if (handlers) {
-      handlers.push(handler as GenericEventHandler);
+      handlers.push(handler);
     } else {
-      this._events.set(event as string, [handler as GenericEventHandler]);
+      this._events.set(event, [handler]);
     }
   }
 
-  once<EventName extends Event>(event: EventName, handler: EventHandler<EventName>): void {
-    const onceHandlers = this._once.get(event as string);
-    // Wrap handler so it auto-removes on first fire.
-    const wrapped: GenericEventHandler = (...args) => {
-      this.off(event, handler);
-      (handler as GenericEventHandler)(...args);
+  once(event: string, handler: GenericEventHandler): void {
+    const wrapped: GenericEventHandler = (...args: any[]) => {
+      // Fully remove before firing so the handler runs exactly once
+      this._removeHandler(event, wrapped);
+      handler(...args);
     };
-    if (onceHandlers) {
-      onceHandlers.push(wrapped);
+    const handlers = this._events.get(event);
+    if (handlers) {
+      handlers.push(wrapped);
     } else {
-      this._once.set(event as string, [wrapped]);
+      this._events.set(event, [wrapped]);
     }
-    this.on(event, wrapped as EventHandler<EventName>);
   }
 
-  off<EventName extends Event>(event: EventName, handler: EventHandler<EventName>): void {
-    const handlers = this._events.get(event as string);
-    if (!handlers) return;
+  off(event: string, handler: GenericEventHandler): void {
+    this._removeHandler(event, handler);
+  }
 
-    const idx = handlers.indexOf(handler as GenericEventHandler);
+  private _removeHandler(event: string, handler: GenericEventHandler): void {
+    const handlers = this._events.get(event);
+    if (!handlers) return;
+    const idx = handlers.indexOf(handler);
     if (idx !== -1) {
       handlers.splice(idx, 1);
     }
-
-    const onceHandlers = this._once.get(event as string);
-    if (onceHandlers) {
-      const onceIdx = onceHandlers.indexOf(handler as GenericEventHandler);
-      if (onceIdx !== -1) {
-        onceHandlers.splice(onceIdx, 1);
-      }
-    }
-
     if (handlers.length === 0) {
-      this._events.delete(event as string);
+      this._events.delete(event);
     }
   }
 
-  emit<EventName extends Event>(event: EventName, ...data: HlsEventPayloads[EventName] extends void ? [] : [HlsEventPayloads[EventName]]): void {
+  emit<EventName extends string>(event: EventName, ...data: PayloadOf<EventName>): void {
     const key = event as string;
+    // Snapshot handlers so that "once" removals during iteration are safe
     const handlers = this._events.get(key);
-    if (handlers) {
-      for (const handler of handlers) {
-        handler(...data);
-      }
-    }
-
-    const onceHandlers = this._once.get(key);
-    if (onceHandlers && onceHandlers.length > 0) {
-      // Clone to avoid mutation during iteration
-      for (const handler of onceHandlers.slice()) {
-        this.off(event, handler as EventHandler<EventName>);
-      }
-      for (const handler of onceHandlers) {
-        handler(...data);
-      }
+    if (!handlers || handlers.length === 0) return;
+    const snapshot = handlers.slice();
+    for (const handler of snapshot) {
+      handler(...(data as unknown as any[]));
     }
   }
 
-  removeAllListeners(event?: Event): void {
+  removeAllListeners(event?: string): void {
     if (event) {
-      this._events.delete(event as string);
-      this._once.delete(event as string);
+      this._events.delete(event);
     } else {
       this._events.clear();
-      this._once.clear();
     }
   }
 
-  listeners(event: Event): GenericEventHandler[] {
-    return (this._events.get(event as string) || []).slice();
+  listeners(event: string): GenericEventHandler[] {
+    return (this._events.get(event) || []).slice();
   }
 
-  trigger<EventName extends Event>(event: EventName, ...data: HlsEventPayloads[EventName] extends void ? [] : [HlsEventPayloads[EventName]]): void {
+  trigger<EventName extends string>(event: EventName, ...data: PayloadOf<EventName>): void {
     this.emit(event, ...data);
   }
 }

@@ -133,6 +133,7 @@ export class FragmentLoader {
     })
       .then(async (response) => {
         clearTimeout(timeout);
+        if (this._stats.aborted) return;
         if (!response.ok) {
           this._stats.loading = false;
           callbacks.onError({ code: response.status, text: response.statusText }, context);

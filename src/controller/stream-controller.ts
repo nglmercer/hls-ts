@@ -29,6 +29,7 @@ export class StreamController {
   private _timeUpdateTimer: ReturnType<typeof setTimeout> | null = null;
   private _lastFragmentIndex: number = -1;
   private _lastFragmentIndexLevel: number = -1;
+  private _seekGeneration: number = 0;
   private logger = new Logger('StreamController');
 
   constructor(hls: Hls, levelController: LevelController, abrController: AbrController) {
@@ -204,6 +205,7 @@ export class StreamController {
   };
 
   _onSeeking = (): void => {
+    this._seekGeneration++;
     this._seeking = true;
     this._loading = false;
     this._currentFrag = null;
@@ -442,6 +444,7 @@ onError: (err) => {
 
   private async _processFragment(data: ArrayBuffer, frag: Fragment): Promise<void> {
     const uint8 = new Uint8Array(data);
+    const gen = this._seekGeneration;
 
     try {
       const baseDts = Math.round(frag.start * 90000);
@@ -464,6 +467,7 @@ onError: (err) => {
 
       const { remuxResult } = await this._transmuxer.transmux(uint8, frag.start, baseDts, discontinuity);
 
+      if (this._seekGeneration !== gen) return;
       if (!remuxResult) return;
 
       // Append init segment first (contains ftyp + moov with all tracks)

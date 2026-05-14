@@ -12,8 +12,8 @@ describe('Hls - edge cases', () => {
     const hls = new Hls();
     let count = 0;
     hls.once(Events.MANIFEST_LOADING, () => count++);
-    hls.trigger(Events.MANIFEST_LOADING, {});
-    hls.trigger(Events.MANIFEST_LOADING, {});
+    hls.trigger(Events.MANIFEST_LOADING, { url: 'http://example.com/test.m3u8' });
+    hls.trigger(Events.MANIFEST_LOADING, { url: 'http://example.com/test.m3u8' });
     expect(count).toBe(1);
   });
 
@@ -23,7 +23,7 @@ describe('Hls - edge cases', () => {
     const fn = () => count++;
     hls.on(Events.MANIFEST_LOADING, fn);
     hls.off(Events.MANIFEST_LOADING, fn);
-    hls.trigger(Events.MANIFEST_LOADING, {});
+    hls.trigger(Events.MANIFEST_LOADING, { url: 'http://example.com/test.m3u8' });
     expect(count).toBe(0);
   });
 
@@ -31,7 +31,7 @@ describe('Hls - edge cases', () => {
     const hls = new Hls();
     let emitted = false;
     hls.on(Events.MANIFEST_LOADING, () => { emitted = true; });
-    hls.emit(Events.MANIFEST_LOADING, {});
+    hls.emit(Events.MANIFEST_LOADING, { url: 'http://example.com/test.m3u8' });
     expect(emitted).toBe(true);
   });
 
@@ -40,7 +40,7 @@ describe('Hls - edge cases', () => {
     let count = 0;
     hls.on(Events.MANIFEST_LOADING, () => count++);
     hls.removeAllListeners(Events.MANIFEST_LOADING);
-    hls.trigger(Events.MANIFEST_LOADING, {});
+    hls.trigger(Events.MANIFEST_LOADING, { url: 'http://example.com/test.m3u8' });
     expect(count).toBe(0);
   });
 
@@ -114,6 +114,8 @@ seg1.ts
       subtitleTracks: [],
       url: 'http://example.com/bad.m3u8',
     });
+
+    expect(errorEmitted).toBe(true);
   });
 
   it('should trigger timeout error via playlist loader', () => {

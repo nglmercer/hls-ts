@@ -131,6 +131,7 @@ export class TransmuxerController {
   }
 
   reset() {
+    this._callbacks.clear();
     if (this._useWorker && this._worker) {
       this._worker.postMessage({ type: TransmuxerMessages.RESET, id: -1 });
     } else if (this._inline) {

@@ -7,7 +7,7 @@ describe('Hls Integration', () => {
   it('should emit MEDIA_ATTACHED when attachMedia is called', () => {
     const hls = new Hls();
     let eventData: { media: HTMLVideoElement } | null = null;
-    hls.on(Events.MEDIA_ATTACHED, (data: { media: HTMLVideoElement }) => { eventData = data; });
+    hls.on(Events.MEDIA_ATTACHED, (data: { media: HTMLMediaElement }) => { eventData = data as { media: HTMLVideoElement }; });
     const video = { 
       src: '',
       addEventListener: () => {},
@@ -52,7 +52,7 @@ describe('Hls Integration', () => {
     let count = 0;
     hls.on(Events.MANIFEST_LOADING, () => count++);
     hls.destroy();
-    hls.trigger(Events.MANIFEST_LOADING, {});
+    hls.trigger(Events.MANIFEST_LOADING, { url: 'test.m3u8' });
     expect(count).toBe(0);
   });
 
@@ -96,8 +96,19 @@ describe('Hls Integration', () => {
     hls.on(Events.MANIFEST_PARSED, () => events.push('parsed'));
 
     hls.trigger(Events.MANIFEST_LOADING, { url: 'test.m3u8' });
-    hls.trigger(Events.MANIFEST_LOADED, { levels: [] });
-    hls.trigger(Events.MANIFEST_PARSED, { levels: [] });
+hls.trigger(Events.MANIFEST_LOADED, {
+       data: '',
+       levels: [],
+       audioTracks: [],
+       subtitleTracks: [],
+       url: 'http://example.com/media.m3u8',
+     });
+     hls.trigger(Events.MANIFEST_PARSED, {
+       levels: [],
+       audioTracks: [],
+       subtitleTracks: [],
+       url: 'http://example.com/media.m3u8',
+     });
 
     expect(events).toEqual(['loading', 'loaded', 'parsed']);
   });
