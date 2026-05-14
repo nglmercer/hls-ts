@@ -44,6 +44,7 @@ export class FragmentLoader {
   private _retryConfig: RetryConfig;
   private _timeoutMs: number;
   private _abortController: AbortController | null = null;
+  private _requestGen: number = 0;
   private static _cache: Map<string, CacheEntry> = new Map();
   private static _cacheMaxSize = 50;
   private _sessionRetryCount: number = 0;
@@ -68,26 +69,31 @@ export class FragmentLoader {
     const cacheKey = context.url;
     const cached = FragmentLoader._cache.get(cacheKey);
     if (cached) {
-      cached.lastAccess = Date.now();
-      const stats = this._createStats();
-      stats.trequest = cached.stats.trequest;
-      stats.tfirst = cached.stats.tfirst;
-      stats.tload = performance.now();
-      stats.loaded = cached.data.byteLength;
-      stats.total = cached.data.byteLength;
-      this._stats = stats;
-      callbacks.onSuccess(
-        { url: context.url, data: cached.data, stats },
-        stats,
-        context,
-      );
-      return;
+      if (cached.data.byteLength === 0) {
+        FragmentLoader._cache.delete(cacheKey);
+      } else {
+        cached.lastAccess = Date.now();
+        const stats = this._createStats();
+        stats.trequest = cached.stats.trequest;
+        stats.tfirst = cached.stats.tfirst;
+        stats.tload = performance.now();
+        stats.loaded = cached.data.byteLength;
+        stats.total = cached.data.byteLength;
+        this._stats = stats;
+        callbacks.onSuccess(
+          { url: context.url, data: cached.data.slice(0), stats },
+          stats,
+          context,
+        );
+        return;
+      }
     }
     this.abort();
     this._loadWithRetry(context, callbacks);
   }
 
   private _storeCache(url: string, data: ArrayBuffer, stats: FragmentStats): void {
+    if (data.byteLength === 0) return;
     if (FragmentLoader._cache.size >= FragmentLoader._cacheMaxSize) {
       let oldestKey = '';
       let oldestTime = Infinity;
@@ -99,7 +105,7 @@ export class FragmentLoader {
       }
       if (oldestKey) FragmentLoader._cache.delete(oldestKey);
     }
-    FragmentLoader._cache.set(url, { data, stats, lastAccess: Date.now() });
+    FragmentLoader._cache.set(url, { data: data.slice(0), stats, lastAccess: Date.now() });
   }
 
   abort(): void {
@@ -114,6 +120,7 @@ export class FragmentLoader {
       callbacks.onError({ code: 0, text: 'Max session retries exceeded' }, context);
       return;
     }
+    const gen = ++this._requestGen;
     this._stats = this._createStats();
     this._stats.loading = true;
     this._stats.trequest = performance.now();
@@ -121,6 +128,7 @@ export class FragmentLoader {
     this._abortController = new AbortController();
 
     const timeout = setTimeout(() => {
+      this._stats.aborted = true;
       this._abortController?.abort();
       this._stats.loading = false;
       this._stats.tload = performance.now();
@@ -133,7 +141,7 @@ export class FragmentLoader {
     })
       .then(async (response) => {
         clearTimeout(timeout);
-        if (this._stats.aborted) return;
+        if (gen !== this._requestGen) return;
         if (!response.ok) {
           this._stats.loading = false;
           callbacks.onError({ code: response.status, text: response.statusText }, context);
@@ -207,7 +215,11 @@ export class FragmentLoader {
           this._retryCount++;
           this._sessionRetryCount++;
           const delay = this._getRetryDelay();
-          setTimeout(() => this._loadWithRetry(context, callbacks), delay);
+          const retryGen = ++this._requestGen;
+          setTimeout(() => {
+            if (retryGen !== this._requestGen) return;
+            this._loadWithRetry(context, callbacks);
+          }, delay);
         } else {
           this._sessionRetryCount++;
           callbacks.onError({ code: 0, text: err.message }, context);
