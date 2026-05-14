@@ -295,7 +295,7 @@ export class StreamController {
       const f = fragments[mid];
       if (time < f.start) {
         hi = mid - 1;
-      } else if (time > f.start + f.duration) {
+      } else if (time >= f.start + f.duration) {
         lo = mid + 1;
       } else {
         this._lastFragmentIndex = mid;
@@ -486,10 +486,10 @@ onError: (err) => {
         this._transmuxer.reset();
         this._lastFragmentIndex = -1;
         if (this._media && this._media.buffered.length > 0) {
-          const start = frag.start;
-          const end = this._media.buffered.end(this._media.buffered.length - 1);
-          if (end > start) {
-            this.hls.trigger(Events.BUFFER_FLUSHING, { startOffset: start, endOffset: end });
+          const flushStart = Math.max(this._media.currentTime, Math.max(0, frag.start - 0.5));
+          const flushEnd = this._media.buffered.end(this._media.buffered.length - 1);
+          if (flushEnd > flushStart) {
+            this.hls.trigger(Events.BUFFER_FLUSHING, { startOffset: flushStart, endOffset: flushEnd });
           }
         }
       }
